@@ -21,19 +21,19 @@
         <CONFIGURATION isDebug="0" name="Release" targetName="revertebrator"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_audio_basics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_devices" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_plugin_client" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_processors" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_utils" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_core" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_data_structures" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_dsp" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_events" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_graphics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_gui_basics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_gui_extra" path="../../../../../usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_core" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_data_structures" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_dsp" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_events" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="/usr/share/juce/modules"/>
       </MODULEPATHS>
     </LINUX_MAKE>
     <VS2022 targetFolder="Builds/VisualStudio2022">
@@ -42,19 +42,19 @@
         <CONFIGURATION isDebug="0" name="Release" targetName="revertebrator"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_audio_basics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_devices" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_plugin_client" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_processors" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_utils" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_core" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_data_structures" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_dsp" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_events" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_graphics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_gui_basics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_gui_extra" path="../../../../../usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_core" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_data_structures" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_dsp" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_events" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="/usr/share/juce/modules"/>
       </MODULEPATHS>
     </VS2022>
     <XCODE_MAC targetFolder="Builds/MacOSX">
@@ -63,19 +63,19 @@
         <CONFIGURATION isDebug="0" name="Release" targetName="revertebrator"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_audio_basics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_devices" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_plugin_client" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_processors" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_utils" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_core" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_data_structures" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_dsp" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_events" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_graphics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_gui_basics" path="../../../../../usr/share/juce/modules"/>
-        <MODULEPATH id="juce_gui_extra" path="../../../../../usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_core" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_data_structures" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_dsp" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_events" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="/usr/share/juce/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
   </EXPORTFORMATS>
