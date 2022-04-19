@@ -6,13 +6,22 @@
               pluginCode="Rvtb" pluginManufacturerCode="Scan" aaxIdentifier="org.scanlime.revertebrator">
   <MAINGROUP id="lItzvD" name="revertebrator">
     <GROUP id="{12CE519E-20B2-3A65-045F-BA8855B861A7}" name="Source">
-      <FILE id="Sa7FSd" name="PluginProcessor.cpp" compile="1" resource="0"
-            file="Source/PluginProcessor.cpp"/>
-      <FILE id="NsYEtz" name="PluginProcessor.h" compile="0" resource="0"
-            file="Source/PluginProcessor.h"/>
-      <FILE id="ZyXTm6" name="PluginEditor.cpp" compile="1" resource="0"
-            file="Source/PluginEditor.cpp"/>
-      <FILE id="j1UDD2" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
+      <FILE id="UjjuZ9" name="AudioProcessor.cpp" compile="1" resource="0"
+            file="Source/AudioProcessor.cpp"/>
+      <FILE id="qbbXik" name="AudioProcessor.h" compile="0" resource="0"
+            file="Source/AudioProcessor.h"/>
+      <FILE id="IsvdE3" name="AudioProcessorEditor.cpp" compile="1" resource="0"
+            file="Source/AudioProcessorEditor.cpp"/>
+      <FILE id="tubDD4" name="AudioProcessorEditor.h" compile="0" resource="0"
+            file="Source/AudioProcessorEditor.h"/>
+      <FILE id="P6UDlc" name="DataPanel.cpp" compile="1" resource="0" file="Source/DataPanel.cpp"/>
+      <FILE id="XrCnDc" name="DataPanel.h" compile="0" resource="0" file="Source/DataPanel.h"/>
+      <FILE id="nZrn6R" name="MapPanel.cpp" compile="1" resource="0" file="Source/MapPanel.cpp"/>
+      <FILE id="OUOI2n" name="MapPanel.h" compile="0" resource="0" file="Source/MapPanel.h"/>
+      <FILE id="SWnmag" name="ParamPanel.cpp" compile="1" resource="0" file="Source/ParamPanel.cpp"/>
+      <FILE id="f3Rdx1" name="ParamPanel.h" compile="0" resource="0" file="Source/ParamPanel.h"/>
+      <FILE id="sJekXR" name="WindowPanel.cpp" compile="1" resource="0" file="Source/WindowPanel.cpp"/>
+      <FILE id="wPXm6u" name="WindowPanel.h" compile="0" resource="0" file="Source/WindowPanel.h"/>
     </GROUP>
   </MAINGROUP>
   <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"/>

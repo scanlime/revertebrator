@@ -2,10 +2,10 @@
 
 #include <JuceHeader.h>
 
-class RvAudioProcessor : public juce::AudioProcessor {
+class AudioProcessor : public juce::AudioProcessor {
 public:
-  RvAudioProcessor();
-  ~RvAudioProcessor() override;
+  AudioProcessor();
+  ~AudioProcessor() override;
 
   void prepareToPlay(double sampleRate, int samplesPerBlock) override;
   void releaseResources() override;
@@ -36,5 +36,5 @@ public:
 private:
   juce::AudioProcessorValueTreeState state;
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RvAudioProcessor)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
 };
