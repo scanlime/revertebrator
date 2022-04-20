@@ -1,5 +1,8 @@
 #include "AudioProcessorEditor.h"
 
+using juce::FlexBox;
+using juce::FlexItem;
+
 AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
     : juce::AudioProcessorEditor(&p), dataPanel(p), mapPanel(p), windowPanel(p),
       paramPanel(p) {
@@ -20,9 +23,11 @@ void AudioProcessorEditor::paint(juce::Graphics &g) {
 }
 
 void AudioProcessorEditor::resized() {
-  auto area = getLocalBounds();
-  dataPanel.setBounds(area.removeFromTop(100));
-  paramPanel.setBounds(area.removeFromBottom(100));
-  windowPanel.setBounds(area.removeFromBottom(50));
-  mapPanel.setBounds(area);
+  FlexBox box;
+  box.flexDirection = FlexBox::Direction::column;
+  box.items.add(FlexItem(dataPanel).withMinHeight(100));
+  box.items.add(FlexItem(mapPanel).withFlex(5));
+  box.items.add(FlexItem(windowPanel).withFlex(1));
+  box.items.add(FlexItem(paramPanel).withMinHeight(100));
+  box.performLayout(getLocalBounds().toFloat());
 }

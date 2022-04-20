@@ -8,10 +8,26 @@ AudioProcessor::AudioProcessor()
           "Output", juce::AudioChannelSet::stereo(), true)),
       state(*this, nullptr, "state",
             {std::make_unique<juce::AudioParameterFloat>(
-                "grain_width", "Grain Width",
-                juce::NormalisableRange<float>(0.f, 1.f), .1f)}) {
+                 "grain_width", "Grain Width",
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "grain_rate", "Grain Rate",
+                 juce::NormalisableRange<float>(0.0f, 1000.0f), 100.f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "sel_center", "Selector Center",
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "sel_mod", "Selector Modulation",
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "sel_spread", "Selector Spread",
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "pitch_spread", "Pitch Spread",
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}) {
 
-  state.state.addChild({"uiState",
+  state.state.addChild({"grain_data", {{"src", ""}}, {}}, -1, nullptr);
+  state.state.addChild({"ui_state",
                         {
                             {"width", 450},
                             {"height", 450},

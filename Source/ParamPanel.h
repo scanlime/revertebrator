@@ -10,7 +10,10 @@ public:
   void resized() override;
 
 private:
-  AudioProcessor &audioProcessor;
+  juce::OwnedArray<juce::Label> labels;
+  juce::OwnedArray<juce::Slider> knobs;
+  juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment>
+      knobAttach;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ParamPanel)
 };
