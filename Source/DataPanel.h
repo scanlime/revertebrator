@@ -15,8 +15,8 @@ private:
   AudioProcessor &audioProcessor;
   juce::Value grainDataSrc;
   juce::Label info;
-  juce::FilenameComponent filename{{},    {},       true, false,
-                                   false, "*.json", "",   "Choose a data file"};
+  juce::FilenameComponent filename{
+      {}, {}, false, false, false, "*.json", "", "Open a grain data file..."};
 
   void filenameComponentChanged(juce::FilenameComponent *) override;
   void valueChanged(juce::Value &) override;
