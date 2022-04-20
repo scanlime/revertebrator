@@ -21,7 +21,8 @@ ParamPanel::ParamPanel(AudioProcessor &p) {
 
     auto label = new Label();
     label->attachToComponent(knob, false);
-    label->setText(item, juce::dontSendNotification);
+    label->setText(p.state.getParameter(item)->getName(64),
+                   juce::dontSendNotification);
     label->setJustificationType(juce::Justification::centred);
     addAndMakeVisible(*label);
     labels.add(label);

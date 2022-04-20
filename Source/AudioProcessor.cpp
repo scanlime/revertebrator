@@ -14,13 +14,13 @@ AudioProcessor::AudioProcessor()
                  "grain_rate", "Grain Rate",
                  juce::NormalisableRange<float>(0.0f, 1000.0f), 100.f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "sel_center", "Selector Center",
+                 "sel_center", "Sel Center",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "sel_mod", "Selector Modulation",
+                 "sel_mod", "Sel Mod",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "sel_spread", "Selector Spread",
+                 "sel_spread", "Sel Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
              std::make_unique<juce::AudioParameterFloat>(
                  "pitch_spread", "Pitch Spread",
