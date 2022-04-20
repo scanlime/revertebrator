@@ -20,6 +20,8 @@
       <FILE id="OUOI2n" name="MapPanel.h" compile="0" resource="0" file="Source/MapPanel.h"/>
       <FILE id="SWnmag" name="ParamPanel.cpp" compile="1" resource="0" file="Source/ParamPanel.cpp"/>
       <FILE id="f3Rdx1" name="ParamPanel.h" compile="0" resource="0" file="Source/ParamPanel.h"/>
+      <FILE id="Fb4khv" name="GrainData.cpp" compile="1" resource="0" file="Source/GrainData.cpp"/>
+      <FILE id="P7Hgku" name="GrainData.h" compile="0" resource="0" file="Source/GrainData.h"/>
       <FILE id="sJekXR" name="WindowPanel.cpp" compile="1" resource="0" file="Source/WindowPanel.cpp"/>
       <FILE id="wPXm6u" name="WindowPanel.h" compile="0" resource="0" file="Source/WindowPanel.h"/>
     </GROUP>

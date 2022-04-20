@@ -25,7 +25,7 @@ void AudioProcessorEditor::paint(juce::Graphics &g) {
 void AudioProcessorEditor::resized() {
   FlexBox box;
   box.flexDirection = FlexBox::Direction::column;
-  box.items.add(FlexItem(dataPanel).withMinHeight(55));
+  box.items.add(FlexItem(dataPanel).withMinHeight(48));
   box.items.add(FlexItem(mapPanel).withFlex(4));
   box.items.add(FlexItem(windowPanel).withFlex(1));
   box.items.add(FlexItem(paramPanel).withMinHeight(100));

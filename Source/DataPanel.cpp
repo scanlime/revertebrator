@@ -3,12 +3,15 @@
 using juce::FlexBox;
 using juce::FlexItem;
 
-DataPanel::DataPanel(AudioProcessor &p) : audioProcessor(p) {
+DataPanel::DataPanel(AudioProcessor &p) {
   grainDataSrc.referTo(p.state.state.getChildWithName("grain_data")
                            .getPropertyAsValue("src", nullptr));
+  grainDataStatus.referTo(p.grainData.status);
   grainDataSrc.addListener(this);
+  grainDataStatus.addListener(this);
   filename.addListener(this);
   valueChanged(grainDataSrc);
+  valueChanged(grainDataStatus);
   addAndMakeVisible(info);
   addAndMakeVisible(filename);
   info.setJustificationType(juce::Justification::topLeft);
@@ -28,7 +31,13 @@ void DataPanel::filenameComponentChanged(juce::FilenameComponent *) {
   grainDataSrc.setValue(filename.getCurrentFile().getFullPathName());
 }
 
-void DataPanel::valueChanged(juce::Value &) {
-  filename.setCurrentFile(grainDataSrc.toString(),
-                          juce::NotificationType::dontSendNotification);
+void DataPanel::valueChanged(juce::Value &v) {
+  if (v.refersToSameSourceAs(grainDataSrc)) {
+    filename.setCurrentFile(grainDataSrc.toString(),
+                            juce::NotificationType::dontSendNotification);
+  }
+  if (v.refersToSameSourceAs(grainDataStatus)) {
+    info.setText(grainDataStatus.toString(),
+                 juce::NotificationType::dontSendNotification);
+  }
 }

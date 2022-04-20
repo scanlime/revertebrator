@@ -12,8 +12,7 @@ public:
   void resized() override;
 
 private:
-  AudioProcessor &audioProcessor;
-  juce::Value grainDataSrc;
+  juce::Value grainDataSrc, grainDataStatus;
   juce::Label info;
   juce::FilenameComponent filename{
       {}, {}, false, false, false, "*.json", "", "Open a grain data file..."};

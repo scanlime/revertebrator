@@ -25,7 +25,6 @@ AudioProcessor::AudioProcessor()
              std::make_unique<juce::AudioParameterFloat>(
                  "pitch_spread", "Pitch Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}) {
-
   state.state.addChild({"grain_data", {{"src", ""}}, {}}, -1, nullptr);
   state.state.addChild({"ui_state",
                         {
@@ -34,6 +33,7 @@ AudioProcessor::AudioProcessor()
                         },
                         {}},
                        -1, nullptr);
+  attachState();
 }
 
 AudioProcessor::~AudioProcessor() {}
@@ -82,6 +82,12 @@ void AudioProcessor::getStateInformation(juce::MemoryBlock &destData) {
 void AudioProcessor::setStateInformation(const void *data, int sizeInBytes) {
   if (auto xml = getXmlFromBinary(data, sizeInBytes))
     state.replaceState(juce::ValueTree::fromXml(*xml));
+  attachState();
+}
+
+void AudioProcessor::attachState() {
+  grainData.src.referTo(state.state.getChildWithName("grain_data")
+                            .getPropertyAsValue("src", nullptr));
 }
 
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {

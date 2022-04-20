@@ -1,5 +1,6 @@
 #pragma once
 
+#include "GrainData.h"
 #include <JuceHeader.h>
 
 class AudioProcessor : public juce::AudioProcessor {
@@ -34,7 +35,10 @@ public:
   void setStateInformation(const void *data, int sizeInBytes) override;
 
   juce::AudioProcessorValueTreeState state;
+  GrainData grainData;
 
 private:
+  void attachState();
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
 };
