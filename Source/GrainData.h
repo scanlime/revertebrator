@@ -17,16 +17,26 @@ public:
     bool read(float *const *destChannels, int numDestChannels,
               juce::int64 startSampleInSource, int numSamplesToRead);
 
-    int sampleRate() const;
-    float maxGrainWidth() const;
-    int numBins() const;
-    int numGrains() const;
-    juce::int64 numSamples() const;
+    int sampleRate() const { return ref.state->sampleRate; }
+    float maxGrainWidth() const { return ref.state->maxGrainWidth; }
+    int numBins() const { return ref.state->numBins(); }
+    int numGrains() const { return ref.state->numGrains(); }
+    juce::int64 numSamples() const { return ref.state->soundLen; }
 
-    juce::int64 centerSampleForGrain(int grain) const;
-    float pitchForBin(int bin) const;
+    juce::int64 centerSampleForGrain(int grain) const {
+      return ref.state->grainX[juce::jlimit(0, numGrains() - 1, grain)];
+    }
+
     int closestBinForPitch(float hz) const;
-    juce::Range<int> grainsForBin(int bin) const;
+
+    float pitchForBin(int bin) const {
+      return ref.state->binF0[juce::jlimit(0, numBins() - 1, bin)];
+    }
+
+    juce::Range<int> grainsForBin(int bin) const {
+      bin = juce::jlimit(0, numBins() - 1, bin);
+      return juce::Range<int>(ref.state->binX[bin], ref.state->binX[bin + 1]);
+    }
 
   private:
     GrainData &ref;
@@ -50,8 +60,11 @@ private:
     juce::Array<juce::int64> grainX;
 
     juce::String toString() const;
-    int numBins() const;
-    int numGrains() const;
+
+    int numGrains() const { return grainX.size(); }
+    int numBins() const {
+      return juce::jmin(binF0.size(), binX.size(), binX.size() - 1);
+    }
   };
 
   juce::ReadWriteLock rwLock;
