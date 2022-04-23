@@ -7,8 +7,10 @@ class MapPanel : public juce::Component, private juce::Value::Listener {
 public:
   MapPanel(AudioProcessor &);
   ~MapPanel() override;
+
   void paint(juce::Graphics &) override;
   void resized() override;
+  void mouseMove(const juce::MouseEvent &) override;
 
 private:
   AudioProcessor &audioProcessor;

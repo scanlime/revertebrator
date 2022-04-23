@@ -24,6 +24,15 @@ void MapPanel::valueChanged(juce::Value &) {
   repaint();
 }
 
+void MapPanel::mouseMove(const juce::MouseEvent &event) {
+  GrainData::Accessor gda(audioProcessor.grainData);
+  const auto width = getWidth(), height = getHeight();
+  int bin = event.x / float(width) * gda.numBins();
+  auto gr = gda.grainsForBin(bin);
+  int g = gr.getStart() + event.y / float(height) * gr.getLength();
+  audioProcessor.temp_ptr = gda.centerSampleForGrain(g);
+}
+
 void MapPanel::renderImage() {
   const auto width = getWidth(), height = getHeight();
   mapImage = std::make_unique<Image>(Image::RGB, width, height, false);

@@ -37,10 +37,13 @@ public:
   juce::AudioProcessorValueTreeState state;
   GrainData grainData;
 
+  juce::int64 temp_ptr;
+
 private:
   void attachState();
 
-  juce::int64 temp_ptr;
+  double outputSampleRate;
+  juce::OwnedArray<juce::WindowedSincInterpolator> outputResampler;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
 };

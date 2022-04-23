@@ -24,7 +24,8 @@ AudioProcessor::AudioProcessor()
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
              std::make_unique<juce::AudioParameterFloat>(
                  "pitch_spread", "Pitch Spread",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}) {
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
+      outputSampleRate(48000.) {
   state.state.addChild({"grain_data", {{"src", ""}}, {}}, -1, nullptr);
   state.state.addChild({"ui_state",
                         {
@@ -41,17 +42,21 @@ AudioProcessor::AudioProcessor()
 AudioProcessor::~AudioProcessor() {}
 
 const String AudioProcessor::getName() const { return JucePlugin_Name; }
+bool AudioProcessor::hasEditor() const { return true; }
 bool AudioProcessor::acceptsMidi() const { return true; }
 bool AudioProcessor::producesMidi() const { return false; }
 bool AudioProcessor::isMidiEffect() const { return false; }
 double AudioProcessor::getTailLengthSeconds() const { return 0.0; }
+
 int AudioProcessor::getNumPrograms() { return 1; }
 int AudioProcessor::getCurrentProgram() { return 0; }
 void AudioProcessor::setCurrentProgram(int index) {}
 const String AudioProcessor::getProgramName(int index) { return {}; }
 void AudioProcessor::changeProgramName(int index, const String &newName) {}
 
-void AudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {}
+void AudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+  outputSampleRate = sampleRate;
+}
 
 void AudioProcessor::releaseResources() {}
 
@@ -68,14 +73,27 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto totalNumOutputChannels = getTotalNumOutputChannels();
   GrainData::Accessor gda(grainData);
 
-  if (!gda.read(buffer.getArrayOfWritePointers(), buffer.getNumChannels(),
-                temp_ptr, buffer.getNumSamples())) {
+  double speedRatio = gda.sampleRate() / outputSampleRate;
+  juce::AudioBuffer<float> tmp(buffer.getNumChannels(), buffer.getNumSamples());
+
+  while (tmp.getNumChannels() > outputResampler.size()) {
+    outputResampler.add(new juce::WindowedSincInterpolator());
+  }
+
+  if (gda.read(tmp.getArrayOfWritePointers(), tmp.getNumChannels(), temp_ptr,
+               tmp.getNumSamples())) {
+
+    int actualSamples = 0;
+    for (int ch = 0; ch < tmp.getNumChannels(); ch++) {
+      actualSamples = outputResampler[ch]->process(
+          speedRatio, tmp.getReadPointer(0 /*ch*/), buffer.getWritePointer(ch),
+          buffer.getNumSamples());
+    }
+  } else {
     buffer.clear(0, buffer.getNumSamples());
   }
-  temp_ptr += buffer.getNumSamples();
 }
 
-bool AudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor *AudioProcessor::createEditor() {
   return new AudioProcessorEditor(*this);
 }
