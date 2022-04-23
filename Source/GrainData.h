@@ -20,6 +20,7 @@ public:
     float maxGrainWidth();
     int numBins();
     int numGrains();
+    juce::int64 numSamples();
 
     juce::int64 centerSampleForGrain(int grain);
     float pitchForBin(int bin);

@@ -32,6 +32,8 @@ int GrainData::Accessor::numBins() {
 
 int GrainData::Accessor::numGrains() { return ref.state->grainX.size(); }
 
+juce::int64 GrainData::Accessor::numSamples() { return ref.state->soundLen; }
+
 juce::Range<int> GrainData::Accessor::grainsForBin(int bin) {
   bin = juce::jlimit(0, numBins() - 1, bin);
   return juce::Range<int>(ref.state->binX[bin], ref.state->binX[bin + 1]);
