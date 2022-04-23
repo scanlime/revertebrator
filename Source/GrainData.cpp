@@ -112,9 +112,10 @@ void GrainData::load(juce::String &srcFile) {
     return;
   }
 
-  // buffer up to the entire thing, but try to load it as needed asynchronously
+  // Keep the buffer smallish until BufferingAudioReader is more efficient
+  const juce::int64 bufferSize = 32 * 1024 * 1024;
   newState->reader = std::make_unique<juce::BufferingAudioReader>(
-      formatReader, loadingThread, newState->soundLen);
+      formatReader, loadingThread, bufferSize);
 
   // Bin index (int list)
   if (varBinX.isArray()) {
