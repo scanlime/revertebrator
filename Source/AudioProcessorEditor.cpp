@@ -18,8 +18,7 @@ AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
 AudioProcessorEditor::~AudioProcessorEditor() {}
 
 void AudioProcessorEditor::paint(juce::Graphics &g) {
-  g.fillAll(
-      getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+  g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
 }
 
 void AudioProcessorEditor::resized() {

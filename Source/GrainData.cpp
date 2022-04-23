@@ -5,7 +5,7 @@ using juce::JSON;
 using juce::String;
 using juce::var;
 
-GrainData::GrainData() {
+GrainData::GrainData() : state(std::make_unique<State>()) {
   src.addListener(this);
   valueChanged(src);
 }

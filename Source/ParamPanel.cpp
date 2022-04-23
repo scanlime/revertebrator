@@ -39,8 +39,9 @@ void ParamPanel::resized() {
   FlexBox inner;
   outer.flexDirection = FlexBox::Direction::column;
   outer.justifyContent = FlexBox::JustifyContent::flexEnd;
+  inner.justifyContent = FlexBox::JustifyContent::center;
   for (auto item : knobs) {
-    inner.items.add(FlexItem(*item).withFlex(1));
+    inner.items.add(FlexItem(*item).withFlex(1).withMaxWidth(100));
   }
   outer.items.add(FlexItem(inner).withMinHeight(80));
   outer.performLayout(getLocalBounds().toFloat());

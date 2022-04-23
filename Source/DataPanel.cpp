@@ -14,7 +14,6 @@ DataPanel::DataPanel(AudioProcessor &p) {
   valueChanged(grainDataStatus);
   addAndMakeVisible(info);
   addAndMakeVisible(filename);
-  info.setJustificationType(juce::Justification::topLeft);
 }
 
 DataPanel::~DataPanel() {}
