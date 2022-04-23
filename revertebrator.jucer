@@ -26,7 +26,11 @@
       <FILE id="wPXm6u" name="WindowPanel.h" compile="0" resource="0" file="Source/WindowPanel.h"/>
     </GROUP>
   </MAINGROUP>
-  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"/>
+  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"
+               JUCE_USE_OGGVORBIS="0" JUCE_USE_FLAC="1" JUCE_USE_MP3AUDIOFORMAT="0"
+               JUCE_USE_LAME_AUDIO_FORMAT="0" JUCE_USE_WINDOWS_MEDIA_FORMAT="0"
+               JUCE_USE_CDREADER="0" JUCE_USE_CDBURNER="0" JUCE_USE_CURL="0"
+               JUCE_WEB_BROWSER="0" JUCE_USE_WIN_WEBVIEW2="0" JUCE_ENABLE_LIVE_CONSTANT_EDITOR="0"/>
   <EXPORTFORMATS>
     <LINUX_MAKE targetFolder="Builds/LinuxMakefile">
       <CONFIGURATIONS>
@@ -42,7 +46,6 @@
         <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_core" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_data_structures" path="/usr/share/juce/modules"/>
-        <MODULEPATH id="juce_dsp" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_events" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
@@ -63,7 +66,6 @@
         <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_core" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_data_structures" path="/usr/share/juce/modules"/>
-        <MODULEPATH id="juce_dsp" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_events" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
@@ -84,7 +86,6 @@
         <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_core" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_data_structures" path="/usr/share/juce/modules"/>
-        <MODULEPATH id="juce_dsp" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_events" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
@@ -102,7 +103,6 @@
     <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
