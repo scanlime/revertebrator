@@ -40,5 +40,7 @@ public:
 private:
   void attachState();
 
+  juce::int64 temp_ptr;
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
 };

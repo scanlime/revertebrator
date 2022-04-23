@@ -5,7 +5,7 @@ using juce::String;
 
 AudioProcessor::AudioProcessor()
     : juce::AudioProcessor(BusesProperties().withOutput(
-          "Output", juce::AudioChannelSet::stereo(), true)),
+          "Output", juce::AudioChannelSet::stereo())),
       state(*this, nullptr, "state",
             {std::make_unique<juce::AudioParameterFloat>(
                  "grain_width", "Grain Width",
@@ -34,6 +34,8 @@ AudioProcessor::AudioProcessor()
                         {}},
                        -1, nullptr);
   attachState();
+  grainData.startThread();
+  temp_ptr = 0;
 }
 
 AudioProcessor::~AudioProcessor() {}
@@ -64,9 +66,13 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                   juce::MidiBuffer &midiMessages) {
   juce::ScopedNoDenormals noDenormals;
   auto totalNumOutputChannels = getTotalNumOutputChannels();
+  GrainData::Accessor gda(grainData);
 
-  for (auto i = 0; i < totalNumOutputChannels; ++i)
-    buffer.clear(i, 0, buffer.getNumSamples());
+  if (!gda.read(buffer.getArrayOfWritePointers(), buffer.getNumChannels(),
+                temp_ptr, buffer.getNumSamples())) {
+    buffer.clear(0, buffer.getNumSamples());
+  }
+  temp_ptr += buffer.getNumSamples();
 }
 
 bool AudioProcessor::hasEditor() const { return true; }

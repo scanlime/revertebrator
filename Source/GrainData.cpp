@@ -5,12 +5,15 @@ using juce::JSON;
 using juce::String;
 using juce::var;
 
-GrainData::GrainData() : state(std::make_unique<State>()) {
+GrainData::GrainData()
+    : loadingThread("grain_data_loader"), state(std::make_unique<State>()) {
   src.addListener(this);
   valueChanged(src);
 }
 
 GrainData::~GrainData() {}
+
+void GrainData::startThread() { loadingThread.startThread(); }
 
 GrainData::Accessor::Accessor(GrainData &data)
     : ref(data), reader(data.rwLock) {}
@@ -18,8 +21,13 @@ GrainData::Accessor::Accessor(GrainData &data)
 bool GrainData::Accessor::read(float *const *destChannels, int numDestChannels,
                                juce::int64 startSampleInSource,
                                int numSamplesToRead) {
-  return ref.state->reader->read(destChannels, numDestChannels,
-                                 startSampleInSource, numSamplesToRead);
+  auto &reader = ref.state->reader;
+  if (reader) {
+    return reader->read(destChannels, numDestChannels, startSampleInSource,
+                        numSamplesToRead);
+  } else {
+    return false;
+  }
 }
 
 int GrainData::Accessor::sampleRate() const { return ref.state->sampleRate; }
@@ -89,21 +97,24 @@ void GrainData::load(juce::String &srcFile) {
     return;
   }
 
-  juce::AudioFormatManager formats;
-  formats.registerBasicFormats();
-  newState->reader = std::unique_ptr<juce::AudioFormatReader>(
-      formats.createReaderFor(newState->soundFile));
-  if (!newState->reader) {
-    status.setValue("Can't read from sound file");
-    return;
-  }
-
   newState->soundLen = json.getProperty("sound_len", var());
   newState->maxGrainWidth = json.getProperty("max_grain_width", var());
   newState->sampleRate = json.getProperty("sample_rate", var());
   auto varBinX = json.getProperty("bin_x", var());
   auto varBinF0 = json.getProperty("bin_f0", var());
   auto varGrainX = json.getProperty("grain_x", var());
+
+  juce::AudioFormatManager formats;
+  formats.registerBasicFormats();
+  auto formatReader = formats.createReaderFor(newState->soundFile);
+  if (!formatReader) {
+    status.setValue("Can't read from sound file");
+    return;
+  }
+
+  // buffer up to the entire thing, but try to load it as needed asynchronously
+  newState->reader = std::make_unique<juce::BufferingAudioReader>(
+      formatReader, loadingThread, newState->soundLen);
 
   // Bin index (int list)
   if (varBinX.isArray()) {

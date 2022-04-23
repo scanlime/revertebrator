@@ -6,6 +6,7 @@ class GrainData : private juce::Value::Listener {
 public:
   GrainData();
   ~GrainData() override;
+  void startThread();
 
   juce::Value src, status;
 
@@ -36,9 +37,11 @@ private:
   void valueChanged(juce::Value &) override;
   void load(juce::String &);
 
+  juce::TimeSliceThread loadingThread;
+
   struct State {
     juce::File srcFile, soundFile;
-    std::unique_ptr<juce::AudioFormatReader> reader;
+    std::unique_ptr<juce::BufferingAudioReader> reader;
     juce::int64 soundLen;
     float maxGrainWidth;
     int sampleRate;
