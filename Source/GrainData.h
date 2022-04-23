@@ -16,16 +16,16 @@ public:
     bool read(float *const *destChannels, int numDestChannels,
               juce::int64 startSampleInSource, int numSamplesToRead);
 
-    int sampleRate();
-    float maxGrainWidth();
-    int numBins();
-    int numGrains();
-    juce::int64 numSamples();
+    int sampleRate() const;
+    float maxGrainWidth() const;
+    int numBins() const;
+    int numGrains() const;
+    juce::int64 numSamples() const;
 
-    juce::int64 centerSampleForGrain(int grain);
-    float pitchForBin(int bin);
-    int closestBinForPitch(float hz);
-    juce::Range<int> grainsForBin(int bin);
+    juce::int64 centerSampleForGrain(int grain) const;
+    float pitchForBin(int bin) const;
+    int closestBinForPitch(float hz) const;
+    juce::Range<int> grainsForBin(int bin) const;
 
   private:
     GrainData &ref;
@@ -47,6 +47,8 @@ private:
     juce::Array<juce::int64> grainX;
 
     juce::String toString() const;
+    int numBins() const;
+    int numGrains() const;
   };
 
   juce::ReadWriteLock rwLock;

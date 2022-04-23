@@ -22,32 +22,34 @@ bool GrainData::Accessor::read(float *const *destChannels, int numDestChannels,
                                  startSampleInSource, numSamplesToRead);
 }
 
-int GrainData::Accessor::sampleRate() { return ref.state->sampleRate; }
+int GrainData::Accessor::sampleRate() const { return ref.state->sampleRate; }
 
-float GrainData::Accessor::maxGrainWidth() { return ref.state->maxGrainWidth; }
-
-int GrainData::Accessor::numBins() {
-  return juce::jmin(ref.state->binF0.size(), ref.state->binX.size() - 1);
+float GrainData::Accessor::maxGrainWidth() const {
+  return ref.state->maxGrainWidth;
 }
 
-int GrainData::Accessor::numGrains() { return ref.state->grainX.size(); }
+int GrainData::Accessor::numBins() const { return ref.state->numBins(); }
 
-juce::int64 GrainData::Accessor::numSamples() { return ref.state->soundLen; }
+int GrainData::Accessor::numGrains() const { return ref.state->numGrains(); }
 
-juce::Range<int> GrainData::Accessor::grainsForBin(int bin) {
+juce::int64 GrainData::Accessor::numSamples() const {
+  return ref.state->soundLen;
+}
+
+juce::Range<int> GrainData::Accessor::grainsForBin(int bin) const {
   bin = juce::jlimit(0, numBins() - 1, bin);
   return juce::Range<int>(ref.state->binX[bin], ref.state->binX[bin + 1]);
 }
 
-juce::int64 GrainData::Accessor::centerSampleForGrain(int grain) {
+juce::int64 GrainData::Accessor::centerSampleForGrain(int grain) const {
   return ref.state->grainX[juce::jlimit(0, numGrains() - 1, grain)];
 }
 
-float GrainData::Accessor::pitchForBin(int bin) {
+float GrainData::Accessor::pitchForBin(int bin) const {
   return ref.state->binF0[juce::jlimit(0, numBins() - 1, bin)];
 }
 
-int GrainData::Accessor::closestBinForPitch(float hz) {
+int GrainData::Accessor::closestBinForPitch(float hz) const {
   auto begin = ref.state->binF0.begin(), end = ref.state->binF0.end();
   int bin1 = std::lower_bound(begin, end, hz) - begin;
   int bin0 = bin1 - 1;
@@ -135,8 +137,14 @@ void GrainData::load(juce::String &srcFile) {
   status.setValue(newStatus);
 }
 
+int GrainData::State::numBins() const {
+  return juce::jmin(binF0.size(), binX.size(), binX.size() - 1);
+}
+
+int GrainData::State::numGrains() const { return grainX.size(); }
+
 String GrainData::State::toString() const {
   return String(sampleRate) + " Hz, " + String(soundLen / 1e6) +
          " Msamples, width " + String(maxGrainWidth) + " sec, " +
-         String(binX.size()) + " bins, " + String(grainX.size()) + " grains";
+         String(numBins()) + " bins, " + String(numGrains()) + " grains";
 }
