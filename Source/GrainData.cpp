@@ -16,7 +16,7 @@ GrainData::~GrainData() {}
 void GrainData::startThread() { loadingThread.startThread(); }
 
 GrainData::Accessor::Accessor(GrainData &data)
-    : ref(data), reader(data.rwLock) {}
+    : ref(data), reader(data.stateMutex) {}
 
 bool GrainData::Accessor::read(float *const *destChannels, int numDestChannels,
                                juce::int64 startSampleInSource,
@@ -40,7 +40,7 @@ int GrainData::Accessor::closestBinForPitch(float hz) const {
 }
 
 void GrainData::valueChanged(juce::Value &) {
-  juce::ScopedReadLock reader(rwLock);
+  juce::ScopedReadLock reader(stateMutex);
   auto newSrc = src.toString();
   if (!state || newSrc != state->srcFile.getFullPathName()) {
     load(newSrc);
@@ -86,9 +86,10 @@ void GrainData::load(juce::String &srcFile) {
   }
 
   // Keep the buffer smallish until BufferingAudioReader is more efficient
-  const juce::int64 bufferSize = 32 * 1024 * 1024;
+  const juce::int64 bufferSize = 8 * 1024 * 1024;
   newState->reader = std::make_unique<juce::BufferingAudioReader>(
       formatReader, loadingThread, bufferSize);
+  newState->reader->setReadTimeout(5);
 
   // Bin index (int list)
   if (varBinX.isArray()) {
@@ -116,7 +117,7 @@ void GrainData::load(juce::String &srcFile) {
   auto newStatus = newState->toString();
 
   {
-    juce::ScopedReadLock writer(rwLock);
+    juce::ScopedReadLock writer(stateMutex);
     std::swap(newState, state);
   }
   status.setValue(newStatus);

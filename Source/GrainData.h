@@ -47,8 +47,6 @@ private:
   void valueChanged(juce::Value &) override;
   void load(juce::String &);
 
-  juce::TimeSliceThread loadingThread;
-
   struct State {
     juce::File srcFile, soundFile;
     std::unique_ptr<juce::BufferingAudioReader> reader;
@@ -67,7 +65,8 @@ private:
     }
   };
 
-  juce::ReadWriteLock rwLock;
+  juce::TimeSliceThread loadingThread;
+  juce::ReadWriteLock stateMutex;
   std::unique_ptr<State> state;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainData)
