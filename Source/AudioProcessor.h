@@ -37,7 +37,7 @@ public:
   juce::AudioProcessorValueTreeState state;
   GrainData grainData;
 
-  juce::int64 temp_ptr;
+  juce::int64 temp_ptr, temp_ptr_prev, temp_playback;
 
 private:
   void attachState();

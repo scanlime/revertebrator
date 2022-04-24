@@ -80,8 +80,12 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
     outputResampler.add(new juce::WindowedSincInterpolator());
   }
 
-  if (gda.read(tmp.getArrayOfWritePointers(), tmp.getNumChannels(), temp_ptr,
-               tmp.getNumSamples())) {
+  if (temp_ptr_prev != temp_ptr) {
+    temp_playback = temp_ptr_prev = temp_ptr;
+  }
+
+  if (gda.read(tmp.getArrayOfWritePointers(), tmp.getNumChannels(),
+               temp_playback, tmp.getNumSamples())) {
 
     int actualSamples = 0;
     for (int ch = 0; ch < tmp.getNumChannels(); ch++) {
@@ -89,6 +93,7 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
           speedRatio, tmp.getReadPointer(0 /*ch*/), buffer.getWritePointer(ch),
           buffer.getNumSamples());
     }
+    temp_playback += actualSamples;
   } else {
     buffer.clear(0, buffer.getNumSamples());
   }
