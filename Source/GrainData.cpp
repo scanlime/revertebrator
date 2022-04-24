@@ -85,14 +85,21 @@ void GrainData::load(juce::String &srcFile) {
     return;
   }
 
-  // Keep the buffer smallish until BufferingAudioReader is more efficient
-  /*
-    const juce::int64 bufferSize = 8 * 1024 * 1024;
-    newState->reader = std::make_unique<juce::BufferingAudioReader>(
+  // Keep the buffer smallish until BufferingAudioReader is more efficient.
+  // The balance here now is that the buffer chews CPU if it has many blocks,
+  // the block size is not adjustable, and too small a buffer will cause us
+  // to read samples we don't actually have space to store when playing many
+  // overlapping grains.
+
+  const juce::int64 bufferSize = 0; // 8 * 1024 * 1024;
+  if (bufferSize > 0) {
+    auto buffer = std::make_unique<juce::BufferingAudioReader>(
         formatReader, loadingThread, bufferSize);
-    newState->reader->setReadTimeout(5);
-  */
-  newState->reader = std::unique_ptr<juce::AudioFormatReader>(formatReader);
+    buffer->setReadTimeout(5);
+    newState->reader = std::move(buffer);
+  } else {
+    newState->reader = std::unique_ptr<juce::AudioFormatReader>(formatReader);
+  }
 
   // Bin index (int list)
   if (varBinX.isArray()) {
