@@ -49,7 +49,7 @@ private:
 
   struct State {
     juce::File srcFile, soundFile;
-    std::unique_ptr<juce::BufferingAudioReader> reader;
+    std::unique_ptr<juce::AudioFormatReader> reader;
     juce::int64 soundLen;
     float maxGrainWidth;
     int sampleRate;

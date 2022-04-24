@@ -31,6 +31,7 @@ void MapPanel::mouseMove(const juce::MouseEvent &event) {
   auto gr = gda.grainsForBin(bin);
   int g = gr.getStart() + event.y / float(height) * gr.getLength();
   audioProcessor.temp_ptr = gda.centerSampleForGrain(g);
+  printf("grain at %lld\n", audioProcessor.temp_ptr);
 }
 
 void MapPanel::renderImage() {
