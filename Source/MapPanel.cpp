@@ -25,13 +25,15 @@ void MapPanel::valueChanged(juce::Value &) {
 }
 
 void MapPanel::mouseMove(const juce::MouseEvent &event) {
-  GrainData::Accessor gda(audioProcessor.grainData);
   const auto width = getWidth(), height = getHeight();
-  int bin = event.x / float(width) * gda.numBins();
-  auto gr = gda.grainsForBin(bin);
-  int g = gr.getStart() + event.y / float(height) * gr.getLength();
-  audioProcessor.temp_ptr = gda.centerSampleForGrain(g);
-  printf("grain at %lld\n", audioProcessor.temp_ptr);
+  GrainData::Accessor gda(audioProcessor.grainData);
+
+  if (width > 0 && height > 0 && gda.numBins() > 0 && gda.numGrains() > 0) {
+    int bin = event.x / float(width) * gda.numBins();
+    auto gr = gda.grainsForBin(bin);
+    int g = gr.getStart() + event.y / float(height) * gr.getLength();
+    audioProcessor.temp_ptr = gda.centerSampleForGrain(g);
+  }
 }
 
 void MapPanel::renderImage() {
@@ -40,7 +42,7 @@ void MapPanel::renderImage() {
   auto bg = findColour(juce::ResizableWindow::backgroundColourId);
   GrainData::Accessor gda(audioProcessor.grainData);
 
-  if (gda.numBins() > 0 && gda.numGrains() > 0) {
+  if (width > 0 && height > 0 && gda.numBins() > 0 && gda.numGrains() > 0) {
     Image::BitmapData bits(*mapImage, juce::Image::BitmapData::writeOnly);
     for (int x = 0; x < width; x++) {
       int bin = x / float(width) * gda.numBins();

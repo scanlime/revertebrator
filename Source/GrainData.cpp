@@ -134,7 +134,23 @@ void GrainData::load(juce::String &srcFile) {
 }
 
 String GrainData::State::toString() const {
-  return String(sampleRate) + " Hz, " + String(soundLen / 1e6) +
-         " Msamples, width " + String(maxGrainWidth) + " sec, " +
-         String(numBins()) + " bins, " + String(numGrains()) + " grains";
+  String result;
+  result += String(numGrains()) + " grains, ";
+  result += String(maxGrainWidth, 1) + " sec, ";
+  if (numBins() > 0) {
+    result +=
+        String(binF0[0], 1) + " - " + String(binF0[numBins() - 1], 1) + " Hz, ";
+  }
+  if (soundLen > 1e12) {
+    result += String(soundLen / 1e12, 2) + " terasamples";
+  } else if (soundLen > 1e9) {
+    result += String(soundLen / 1e9, 2) + " gigasamples";
+  } else if (soundLen > 1e6) {
+    result += String(soundLen / 1e6, 1) + " megasamples";
+  } else if (soundLen > 1e3) {
+    result += String(soundLen / 1e3, 1) + " kilosamples";
+  } else if (soundLen > 1) {
+    result += String(soundLen) + " samples";
+  }
+  return result;
 }

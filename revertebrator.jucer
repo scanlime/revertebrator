@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<JUCERPROJECT id="gHkaQH" name="revertebrator" projectType="audioplug" useAppConfig="0"
+<JUCERPROJECT id="gHkaQH" name="Revertebrator" projectType="audioplug" useAppConfig="0"
               addUsingNamespaceToJuceHeader="0" displaySplashScreen="1" jucerFormatVersion="1"
               projectLineFeed="&#10;" companyName="scanlime" pluginCharacteristicsValue="pluginIsSynth,pluginWantsMidiIn"
               pluginCode="Rvtb" pluginManufacturerCode="Scan" aaxIdentifier="org.scanlime.revertebrator">
-  <MAINGROUP id="lItzvD" name="revertebrator">
+  <MAINGROUP id="lItzvD" name="Revertebrator">
     <GROUP id="{12CE519E-20B2-3A65-045F-BA8855B861A7}" name="Source">
       <FILE id="UjjuZ9" name="AudioProcessor.cpp" compile="1" resource="0"
             file="Source/AudioProcessor.cpp"/>
