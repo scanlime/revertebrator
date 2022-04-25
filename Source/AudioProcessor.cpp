@@ -35,7 +35,6 @@ AudioProcessor::AudioProcessor()
                         {}},
                        -1, nullptr);
   attachState();
-  grainData.startThread();
   temp_ptr = 0;
 }
 
@@ -55,10 +54,11 @@ const String AudioProcessor::getProgramName(int index) { return {}; }
 void AudioProcessor::changeProgramName(int index, const String &newName) {}
 
 void AudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+  grainData.startThread();
   outputSampleRate = sampleRate;
 }
 
-void AudioProcessor::releaseResources() {}
+void AudioProcessor::releaseResources() { grainData.stopThread(250); }
 
 bool AudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const {
   if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
@@ -115,8 +115,8 @@ void AudioProcessor::setStateInformation(const void *data, int sizeInBytes) {
 }
 
 void AudioProcessor::attachState() {
-  grainData.src.referTo(state.state.getChildWithName("grain_data")
-                            .getPropertyAsValue("src", nullptr));
+  grainData.referFileInputTo(state.state.getChildWithName("grain_data")
+                                 .getPropertyAsValue("src", nullptr));
 }
 
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {

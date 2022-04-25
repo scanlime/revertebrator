@@ -6,7 +6,7 @@ using juce::FlexItem;
 DataPanel::DataPanel(AudioProcessor &p) {
   grainDataSrc.referTo(p.state.state.getChildWithName("grain_data")
                            .getPropertyAsValue("src", nullptr));
-  grainDataStatus.referTo(p.grainData.status);
+  p.grainData.referToStatusOutput(grainDataStatus);
   grainDataSrc.addListener(this);
   grainDataStatus.addListener(this);
   filename.addListener(this);

@@ -2,13 +2,16 @@
 
 #include <JuceHeader.h>
 
-class GrainData : private juce::Value::Listener {
+class GrainData : private juce::Value::Listener, private juce::TimeSliceClient {
 public:
   GrainData();
   ~GrainData() override;
-  void startThread();
 
-  juce::Value src, status;
+  void startThread();
+  void stopThread(int timeOutMilliseconds);
+
+  void referFileInputTo(const juce::Value &);
+  void referToStatusOutput(juce::Value &);
 
   class Accessor {
   public:
@@ -45,7 +48,8 @@ public:
 
 private:
   void valueChanged(juce::Value &) override;
-  void load(juce::String &);
+  int useTimeSlice() override;
+  juce::String load(const juce::File &);
 
   struct State {
     juce::File srcFile, soundFile;
@@ -66,6 +70,10 @@ private:
   };
 
   juce::TimeSliceThread loadingThread;
+
+  juce::CriticalSection valuesMutex;
+  juce::Value srcValue, statusValue;
+
   juce::ReadWriteLock stateMutex;
   std::unique_ptr<State> state;
 

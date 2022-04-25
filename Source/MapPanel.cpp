@@ -3,7 +3,7 @@
 using juce::Image;
 
 MapPanel::MapPanel(AudioProcessor &p) : audioProcessor(p) {
-  grainDataStatus.referTo(p.grainData.status);
+  p.grainData.referToStatusOutput(grainDataStatus);
   grainDataStatus.addListener(this);
 }
 

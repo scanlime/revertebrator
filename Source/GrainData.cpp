@@ -7,13 +7,26 @@ using juce::var;
 
 GrainData::GrainData()
     : loadingThread("grain_data_loader"), state(std::make_unique<State>()) {
-  src.addListener(this);
-  valueChanged(src);
+  srcValue.addListener(this);
 }
 
-GrainData::~GrainData() {}
+GrainData::~GrainData() { loadingThread.removeTimeSliceClient(this); }
 
 void GrainData::startThread() { loadingThread.startThread(); }
+
+void GrainData::stopThread(int timeOutMilliseconds) {
+  loadingThread.stopThread(timeOutMilliseconds);
+}
+
+void GrainData::referFileInputTo(const juce::Value &v) {
+  juce::ScopedLock sl(valuesMutex);
+  srcValue.referTo(v);
+}
+
+void GrainData::referToStatusOutput(juce::Value &v) {
+  juce::ScopedLock sl(valuesMutex);
+  v.referTo(statusValue);
+}
 
 GrainData::Accessor::Accessor(GrainData &data)
     : ref(data), reader(data.stateMutex) {}
@@ -40,36 +53,52 @@ int GrainData::Accessor::closestBinForPitch(float hz) const {
 }
 
 void GrainData::valueChanged(juce::Value &) {
-  juce::ScopedReadLock reader(stateMutex);
-  auto newSrc = src.toString();
-  if (!state || newSrc != state->srcFile.getFullPathName()) {
-    load(newSrc);
+  juce::ScopedLock sl(valuesMutex);
+  if (srcValue.toString().isNotEmpty()) {
+    statusValue.setValue("Loading grain index...");
+    loadingThread.addTimeSliceClient(this);
   }
 }
 
-void GrainData::load(juce::String &srcFile) {
+int GrainData::useTimeSlice() {
+  String srcToLoad, latestLoadedSrc;
+  {
+    juce::ScopedLock sl(valuesMutex);
+    srcToLoad = srcValue.toString();
+  }
+  {
+    juce::ScopedReadLock reader(stateMutex);
+    if (state) {
+      latestLoadedSrc = state->srcFile.getFullPathName();
+    }
+  }
+  if (srcToLoad == latestLoadedSrc) {
+    // Idle
+    return -1;
+  }
+
+  String newStatus = load(srcToLoad);
+  {
+    juce::ScopedLock sl(valuesMutex);
+    statusValue.setValue(newStatus);
+  }
+  // Check again in case a change occurred while we were loading
+  return 0;
+}
+
+juce::String GrainData::load(const juce::File &srcFile) {
+  if (!srcFile.existsAsFile()) {
+    return "No grain data file";
+  }
+  auto json = JSON::parse(srcFile);
+  if (!json.isObject()) {
+    return "Failed to load JSON data!";
+  }
+
   auto newState = std::make_unique<State>();
   newState->srcFile = srcFile;
-
-  if (!newState->srcFile.existsAsFile()) {
-    status.setValue("No grain data file");
-    return;
-  }
-
-  auto json = JSON::parse(newState->srcFile);
-  if (!json.isObject()) {
-    status.setValue("Failed to load JSON data!");
-    return;
-  }
-
-  newState->soundFile = newState->srcFile.getSiblingFile(
-      json.getProperty("sound_file", var()).toString());
-  if (!newState->soundFile.existsAsFile()) {
-    status.setValue("Can't find sound file: " +
-                    newState->soundFile.getFullPathName());
-    return;
-  }
-
+  newState->soundFile =
+      srcFile.getSiblingFile(json.getProperty("sound_file", var()).toString());
   newState->soundLen = json.getProperty("sound_len", var());
   newState->maxGrainWidth = json.getProperty("max_grain_width", var());
   newState->sampleRate = json.getProperty("sample_rate", var());
@@ -77,12 +106,15 @@ void GrainData::load(juce::String &srcFile) {
   auto varBinF0 = json.getProperty("bin_f0", var());
   auto varGrainX = json.getProperty("grain_x", var());
 
+  if (!newState->soundFile.existsAsFile()) {
+    return "Can't find sound file: " + newState->soundFile.getFullPathName();
+  }
+
   juce::AudioFormatManager formats;
   formats.registerBasicFormats();
   auto formatReader = formats.createReaderFor(newState->soundFile);
   if (!formatReader) {
-    status.setValue("Can't read from sound file");
-    return;
+    return "Can't read from sound file";
   }
 
   // Keep the buffer smallish until BufferingAudioReader is more efficient.
@@ -124,13 +156,12 @@ void GrainData::load(juce::String &srcFile) {
     }
   }
 
-  auto newStatus = newState->toString();
-
+  auto success = newState->toString();
   {
-    juce::ScopedReadLock writer(stateMutex);
+    juce::ScopedWriteLock writer(stateMutex);
     std::swap(newState, state);
   }
-  status.setValue(newStatus);
+  return success;
 }
 
 String GrainData::State::toString() const {
