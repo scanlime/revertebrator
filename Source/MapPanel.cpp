@@ -1,6 +1,41 @@
 #include "MapPanel.h"
+#include "GrainData.h"
 
 using juce::Image;
+using juce::Rectangle;
+using juce::uint64;
+
+class MapLayout {
+public:
+  MapLayout(const Rectangle<float> &bounds, const GrainData::Accessor &gda)
+      : bounds(bounds), gda(gda) {}
+
+  struct PointInfo {
+    bool valid;
+    unsigned bin, grain;
+    uint64 sample;
+  };
+
+  PointInfo pointInfo(const juce::Point<float> &p) {
+    if (bounds.contains(p)) {
+      float relX = (p.x - bounds.getX()) / bounds.getWidth();
+      float relY = (p.y - bounds.getY()) / bounds.getHeight();
+      auto result = PointInfo{true};
+      auto nBins = gda.numBins();
+      result.bin = juce::jlimit(0U, nBins - 1, unsigned(nBins * relX));
+      auto gr = gda.grainsForBin(result.bin);
+      result.grain = gr.clipValue(gr.getStart() + gr.getLength() * relY);
+      result.sample = gda.centerSampleForGrain(result.grain);
+      return result;
+    } else {
+      return PointInfo{false};
+    }
+  }
+
+private:
+  Rectangle<float> bounds;
+  const GrainData::Accessor &gda;
+};
 
 MapPanel::MapPanel(AudioProcessor &p) : audioProcessor(p) {
   p.grainData.referToStatusOutput(grainDataStatus);
@@ -25,37 +60,32 @@ void MapPanel::valueChanged(juce::Value &) {
 }
 
 void MapPanel::mouseMove(const juce::MouseEvent &event) {
-  const auto width = getWidth(), height = getHeight();
   GrainData::Accessor gda(audioProcessor.grainData);
-
-  if (width > 0 && height > 0 && gda.numBins() > 0 && gda.numGrains() > 0) {
-    int bin = event.x / float(width) * gda.numBins();
-    auto gr = gda.grainsForBin(bin);
-    int g = gr.getStart() + event.y / float(height) * gr.getLength();
-    audioProcessor.temp_ptr = gda.centerSampleForGrain(g);
+  auto layout = MapLayout(getLocalBounds().toFloat(), gda);
+  auto point = layout.pointInfo(event.getPosition().toFloat());
+  if (point.valid) {
+    audioProcessor.temp_ptr = point.sample;
   }
 }
 
 void MapPanel::renderImage() {
-  const auto width = getWidth(), height = getHeight();
-  mapImage = std::make_unique<Image>(Image::RGB, width, height, false);
+  const auto bounds = getLocalBounds();
+  mapImage = std::make_unique<Image>(Image::RGB, bounds.getWidth(),
+                                     bounds.getHeight(), false);
+  if (bounds.isEmpty()) {
+    return;
+  }
+
   auto bg = findColour(juce::ResizableWindow::backgroundColourId);
   GrainData::Accessor gda(audioProcessor.grainData);
+  auto layout = MapLayout(bounds.toFloat(), gda);
+  Image::BitmapData bits(*mapImage, juce::Image::BitmapData::writeOnly);
 
-  if (width > 0 && height > 0 && gda.numBins() > 0 && gda.numGrains() > 0) {
-    Image::BitmapData bits(*mapImage, juce::Image::BitmapData::writeOnly);
-    for (int x = 0; x < width; x++) {
-      int bin = x / float(width) * gda.numBins();
-      auto gr = gda.grainsForBin(bin);
-      for (int y = 0; y < height; y++) {
-        int g = gr.getStart() + y / float(height) * gr.getLength();
-        auto iValue = gda.centerSampleForGrain(g);
-        float fValue = iValue / double(gda.numSamples());
-        auto color = bg.contrasting(fValue);
-        bits.setPixelColour(x, y, color);
-      }
+  for (int y = 0; y < bounds.getHeight(); y++) {
+    for (int x = 0; x < bounds.getWidth(); x++) {
+      auto point = layout.pointInfo(juce::Point<float>(x, y));
+      float v = point.valid ? (point.sample / double(gda.numSamples())) : 0.f;
+      bits.setPixelColour(x, y, bg.contrasting(v));
     }
-  } else {
-    mapImage->clear(mapImage->getBounds(), bg);
   }
 }
