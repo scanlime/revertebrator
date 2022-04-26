@@ -4,8 +4,8 @@ using juce::FlexBox;
 using juce::FlexItem;
 
 AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
-    : juce::AudioProcessorEditor(&p), dataPanel(p), mapPanel(p), windowPanel(p),
-      paramPanel(p) {
+    : juce::AudioProcessorEditor(&p), thread("audio_processor_editor"),
+      dataPanel(p), mapPanel(p, thread), windowPanel(p), paramPanel(p) {
   addAndMakeVisible(dataPanel);
   addAndMakeVisible(mapPanel);
   addAndMakeVisible(windowPanel);
@@ -13,9 +13,10 @@ AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
   setSize(450, 450);
   setResizable(true, true);
   setResizeLimits(400, 200, 1600, 1600);
+  thread.startThread();
 }
 
-AudioProcessorEditor::~AudioProcessorEditor() {}
+AudioProcessorEditor::~AudioProcessorEditor() { thread.stopThread(500); }
 
 void AudioProcessorEditor::paint(juce::Graphics &g) {
   g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));

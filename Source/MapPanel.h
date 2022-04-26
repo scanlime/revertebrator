@@ -3,9 +3,37 @@
 #include "AudioProcessor.h"
 #include <JuceHeader.h>
 
-class MapPanel : public juce::Component, private juce::Value::Listener {
+class MapImage : private juce::TimeSliceClient, public juce::ChangeBroadcaster {
 public:
-  MapPanel(AudioProcessor &);
+  MapImage(GrainData &, juce::TimeSliceThread &);
+  ~MapImage() override;
+
+  struct Request {
+    juce::Rectangle<int> bounds;
+    juce::Colour background;
+  };
+
+  void requestChange(const Request &req);
+  void drawLatestImage(juce::Graphics &g, juce::Rectangle<float> location);
+  void discardStoredImage();
+
+private:
+  int useTimeSlice() override;
+
+  GrainData &grainData;
+  juce::TimeSliceThread &thread;
+  juce::CriticalSection mutex;
+  std::unique_ptr<juce::Image> image;
+  Request lastRequest, nextRequest;
+
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MapImage)
+};
+
+class MapPanel : public juce::Component,
+                 private juce::Value::Listener,
+                 private juce::ChangeListener {
+public:
+  MapPanel(AudioProcessor &, juce::TimeSliceThread &);
   ~MapPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -15,10 +43,11 @@ public:
 private:
   AudioProcessor &audioProcessor;
   juce::Value grainDataStatus;
-  std::unique_ptr<juce::Image> mapImage;
+  MapImage mapImage;
 
-  void renderImage();
+  void requestNewImage();
   void valueChanged(juce::Value &) override;
+  void changeListenerCallback(juce::ChangeBroadcaster *) override;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MapPanel)
 };

@@ -53,55 +53,17 @@ private:
   float logPitchRatio;
 };
 
-MapPanel::MapPanel(AudioProcessor &p) : audioProcessor(p) {
-  p.grainData.referToStatusOutput(grainDataStatus);
-  grainDataStatus.addListener(this);
-}
-
-MapPanel::~MapPanel() {}
-
-void MapPanel::paint(juce::Graphics &g) {
-  if (!mapImage || mapImage->getBounds() != getLocalBounds()) {
-    renderImage();
-  }
-  jassert(mapImage && mapImage->getBounds() == getLocalBounds());
-  g.drawImageAt(*mapImage, 0, 0);
-}
-
-void MapPanel::resized() { mapImage = nullptr; }
-
-void MapPanel::valueChanged(juce::Value &) {
-  mapImage = nullptr;
-  repaint();
-}
-
-void MapPanel::mouseMove(const juce::MouseEvent &event) {
-  GrainData::Accessor gda(audioProcessor.grainData);
-  auto layout = MapLayout(getLocalBounds().toFloat(), gda);
-  auto point = layout.pointInfo(event.getPosition().toFloat());
-  if (point.valid) {
-    printf("grain %d bin %d, %f Hz\n", point.grain, point.bin,
-           gda.pitchForBin(point.bin));
-    audioProcessor.temp_ptr = point.sample;
-  }
-}
-
-void MapPanel::renderImage() {
-  const auto bounds = getLocalBounds();
-  mapImage = std::make_unique<Image>(Image::RGB, bounds.getWidth(),
-                                     bounds.getHeight(), false);
-  if (bounds.isEmpty()) {
-    return;
-  }
-
-  auto bg = findColour(juce::ResizableWindow::backgroundColourId);
-  GrainData::Accessor gda(audioProcessor.grainData);
-  auto layout = MapLayout(bounds.toFloat(), gda);
-  Image::BitmapData bits(*mapImage, juce::Image::BitmapData::writeOnly);
+static std::unique_ptr<juce::Image> renderImage(const MapImage::Request &req,
+                                                GrainData &grainData) {
   std::mt19937 prng;
+  auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
+  auto image = std::make_unique<Image>(Image::RGB, width, height, false);
+  GrainData::Accessor gda(grainData);
+  auto layout = MapLayout(req.bounds.toFloat(), gda);
+  Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
 
-  for (int y = 0; y < bounds.getHeight(); y++) {
-    for (int x = 0; x < bounds.getWidth(); x++) {
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
       Point<float> pixelLoc(x, y);
       constexpr int sampleGridSize = 4;
       float accum = 0.f;
@@ -119,8 +81,116 @@ void MapPanel::renderImage() {
               point.valid ? (point.sample / double(gda.numSamples())) : 0.f;
         }
       }
-      bits.setPixelColour(
-          x, y, bg.contrasting(accum / juce::square<float>(sampleGridSize)));
+
+      accum /= juce::square<float>(sampleGridSize);
+      auto color = req.background.contrasting(accum);
+      bits.setPixelColour(x, y, color);
     }
   }
+  return image;
+}
+
+MapPanel::MapPanel(AudioProcessor &audioProcessor,
+                   juce::TimeSliceThread &thread)
+    : audioProcessor(audioProcessor),
+      mapImage(audioProcessor.grainData, thread) {
+  audioProcessor.grainData.referToStatusOutput(grainDataStatus);
+  grainDataStatus.addListener(this);
+  mapImage.addChangeListener(this);
+}
+
+MapPanel::~MapPanel() { mapImage.removeChangeListener(this); }
+
+void MapPanel::paint(juce::Graphics &g) {
+  mapImage.drawLatestImage(g, getLocalBounds().toFloat());
+}
+
+void MapPanel::resized() {
+  // Start working on a new image but keep the old one
+  requestNewImage();
+}
+
+void MapPanel::valueChanged(juce::Value &) {
+  // Immediately discard image when the data source is changed
+  mapImage.discardStoredImage();
+  requestNewImage();
+}
+
+void MapPanel::requestNewImage() {
+  mapImage.requestChange(MapImage::Request{
+      .bounds = getLocalBounds(),
+      .background = findColour(juce::ResizableWindow::backgroundColourId),
+  });
+}
+
+void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) { repaint(); }
+
+void MapPanel::mouseMove(const juce::MouseEvent &event) {
+  GrainData::Accessor gda(audioProcessor.grainData);
+  auto layout = MapLayout(getLocalBounds().toFloat(), gda);
+  auto point = layout.pointInfo(event.getPosition().toFloat());
+  if (point.valid) {
+    printf("grain %d bin %d, %f Hz\n", point.grain, point.bin,
+           gda.pitchForBin(point.bin));
+    audioProcessor.temp_ptr = point.sample;
+  }
+}
+
+bool operator==(const MapImage::Request &a, const MapImage::Request &b) {
+  return a.bounds == b.bounds && a.background == b.background;
+}
+
+MapImage::MapImage(GrainData &grainData, juce::TimeSliceThread &thread)
+    : thread(thread), grainData(grainData) {}
+
+MapImage::~MapImage() { thread.removeTimeSliceClient(this); }
+
+void MapImage::requestChange(const Request &req) {
+  juce::ScopedLock sl(mutex);
+  nextRequest = req;
+  thread.addTimeSliceClient(this);
+}
+
+void MapImage::discardStoredImage() {
+  juce::ScopedLock sl(mutex);
+  lastRequest = Request{};
+  image = nullptr;
+}
+
+void MapImage::drawLatestImage(juce::Graphics &g,
+                               juce::Rectangle<float> location) {
+  juce::ScopedLock sl(mutex);
+  if (image) {
+    printf("Repainting image src %d x %d\n", image->getWidth(),
+           image->getHeight());
+    g.drawImage(*image, location);
+  }
+}
+
+int MapImage::useTimeSlice() {
+  Request req;
+  {
+    juce::ScopedLock sl(mutex);
+    req = nextRequest;
+    if (image && lastRequest == req) {
+      // Idle
+      return -1;
+    }
+  }
+  printf("Start rendering %d x %d\n", req.bounds.getWidth(),
+         req.bounds.getHeight());
+  auto newImage = renderImage(req, grainData);
+  printf("Done rendering %d x %d\n", req.bounds.getWidth(),
+         req.bounds.getHeight());
+  {
+    juce::ScopedLock sl(mutex);
+    lastRequest = req;
+    std::swap(newImage, image);
+  }
+  {
+    const juce::MessageManagerLock mmlock;
+    sendChangeMessage();
+  }
+  // Re-check for requests that may have arrived during render
+  return 0;
 }
