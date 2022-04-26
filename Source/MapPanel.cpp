@@ -136,8 +136,12 @@ void MapPanel::mouseMove(const juce::MouseEvent &event) {
   }
 }
 
-bool operator==(const MapImage::Request &a, const MapImage::Request &b) {
-  return a.bounds == b.bounds && a.background == b.background;
+void MapImage::Request::usePreviewResolution() {
+  constexpr int maxDimension = 384;
+  int dimension = juce::jmax(bounds.getWidth(), bounds.getHeight());
+  if (dimension > maxDimension) {
+    bounds = (bounds.toFloat() * maxDimension / dimension).toNearestInt();
+  }
 }
 
 MapImage::MapImage(GrainData &grainData, juce::TimeSliceThread &thread)
@@ -161,8 +165,6 @@ void MapImage::drawLatestImage(juce::Graphics &g,
                                juce::Rectangle<float> location) {
   juce::ScopedLock sl(mutex);
   if (image) {
-    printf("Repainting image src %d x %d\n", image->getWidth(),
-           image->getHeight());
     g.drawImage(*image, location);
   }
 }
@@ -176,12 +178,11 @@ int MapImage::useTimeSlice() {
       // Idle
       return -1;
     }
+    if (!image) {
+      req.usePreviewResolution();
+    }
   }
-  printf("Start rendering %d x %d\n", req.bounds.getWidth(),
-         req.bounds.getHeight());
   auto newImage = renderImage(req, grainData);
-  printf("Done rendering %d x %d\n", req.bounds.getWidth(),
-         req.bounds.getHeight());
   {
     juce::ScopedLock sl(mutex);
     lastRequest = req;

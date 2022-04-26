@@ -11,6 +11,11 @@ public:
   struct Request {
     juce::Rectangle<int> bounds;
     juce::Colour background;
+
+    void usePreviewResolution();
+    bool operator==(const Request &r) {
+      return bounds == r.bounds && background == r.background;
+    }
   };
 
   void requestChange(const Request &req);
