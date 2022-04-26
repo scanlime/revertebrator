@@ -1,7 +1,9 @@
 #include "MapPanel.h"
 #include "GrainData.h"
+#include <random>
 
 using juce::Image;
+using juce::Point;
 using juce::Rectangle;
 using juce::uint64;
 
@@ -16,14 +18,25 @@ public:
     uint64 sample;
   };
 
-  PointInfo pointInfo(const juce::Point<float> &p) {
+  forcedinline PointInfo pointInfo(const Point<float> &p) {
     if (bounds.contains(p)) {
-      float relX = (p.x - bounds.getX()) / bounds.getWidth();
-      float relY = (p.y - bounds.getY()) / bounds.getHeight();
-      auto result = PointInfo{true};
-      auto nBins = gda.numBins();
-      result.bin = juce::jlimit(0U, nBins - 1, unsigned(nBins * relX));
+      auto result = PointInfo{.valid = true};
+
+      // X axis: logarithmic pitch
+      float relX = (p.x - bounds.getX()) / (bounds.getWidth() - 1);
+      auto pitches = gda.pitchRange();
+      if (pitches.isEmpty()) {
+        result.bin = 0;
+      } else {
+        float lowEnd = pitches.getStart();
+        float highRatio = pitches.getEnd() / lowEnd;
+        float hz = lowEnd * exp(relX * log(highRatio));
+        result.bin = gda.closestBinForPitch(hz);
+      }
+
+      // Y axis: linear grain selector, variable resolution
       auto gr = gda.grainsForBin(result.bin);
+      float relY = (p.y - bounds.getY()) / bounds.getHeight();
       result.grain = gr.clipValue(gr.getStart() + gr.getLength() * relY);
       result.sample = gda.centerSampleForGrain(result.grain);
       return result;
@@ -64,6 +77,8 @@ void MapPanel::mouseMove(const juce::MouseEvent &event) {
   auto layout = MapLayout(getLocalBounds().toFloat(), gda);
   auto point = layout.pointInfo(event.getPosition().toFloat());
   if (point.valid) {
+    printf("grain %d bin %d, %f Hz\n", point.grain, point.bin,
+           gda.pitchForBin(point.bin));
     audioProcessor.temp_ptr = point.sample;
   }
 }
@@ -80,12 +95,29 @@ void MapPanel::renderImage() {
   GrainData::Accessor gda(audioProcessor.grainData);
   auto layout = MapLayout(bounds.toFloat(), gda);
   Image::BitmapData bits(*mapImage, juce::Image::BitmapData::writeOnly);
+  std::mt19937 prng;
 
   for (int y = 0; y < bounds.getHeight(); y++) {
     for (int x = 0; x < bounds.getWidth(); x++) {
-      auto point = layout.pointInfo(juce::Point<float>(x, y));
-      float v = point.valid ? (point.sample / double(gda.numSamples())) : 0.f;
-      bits.setPixelColour(x, y, bg.contrasting(v));
+      Point<float> pixelLoc(x, y);
+      constexpr int sampleGridSize = 4;
+      float accum = 0.f;
+
+      for (int sy = 0; sy < sampleGridSize; sy++) {
+        for (int sx = 0; sx < sampleGridSize; sx++) {
+          auto jitter = prng();
+          float jx = float(jitter & 0xffff) / 0xffff;
+          jitter >>= 16;
+          float jy = float(jitter & 0xffff) / 0xffff;
+          auto sampleLoc =
+              pixelLoc + Point<float>(sx + jx, sy + jy) / sampleGridSize;
+          auto point = layout.pointInfo(sampleLoc);
+          accum +=
+              point.valid ? (point.sample / double(gda.numSamples())) : 0.f;
+        }
+      }
+      bits.setPixelColour(
+          x, y, bg.contrasting(accum / juce::square<float>(sampleGridSize)));
     }
   }
 }

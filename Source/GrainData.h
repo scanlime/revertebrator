@@ -20,17 +20,19 @@ public:
     bool read(float *const *destChannels, int numDestChannels,
               juce::int64 startSampleInSource, int numSamplesToRead);
 
-    unsigned sampleRate() const { return ref.state->sampleRate; }
-    juce::uint64 numSamples() const { return ref.state->soundLen; }
-    float maxGrainWidth() const { return ref.state->maxGrainWidth; }
-    unsigned numGrains() const { return ref.state->grainX.size(); }
+    forcedinline unsigned sampleRate() const { return ref.state->sampleRate; }
+    forcedinline juce::uint64 numSamples() const { return ref.state->soundLen; }
+    forcedinline float maxGrainWidth() const {
+      return ref.state->maxGrainWidth;
+    }
+    forcedinline unsigned numGrains() const { return ref.state->grainX.size(); }
 
-    unsigned numBins() const {
+    forcedinline unsigned numBins() const {
       return juce::jmin(ref.state->binF0.size(), ref.state->binX.size(),
                         ref.state->binX.size() - 1);
     }
 
-    juce::uint64 centerSampleForGrain(unsigned grain) const {
+    forcedinline juce::uint64 centerSampleForGrain(unsigned grain) const {
       if (grain < numGrains()) {
         return ref.state->grainX[grain];
       } else {
@@ -38,7 +40,7 @@ public:
       }
     }
 
-    float pitchForBin(unsigned bin) const {
+    forcedinline float pitchForBin(unsigned bin) const {
       if (bin < numBins()) {
         return ref.state->binF0[bin];
       } else {
@@ -46,7 +48,7 @@ public:
       }
     }
 
-    juce::Range<float> pitchRange() const {
+    forcedinline juce::Range<float> pitchRange() const {
       if (numBins()) {
         return juce::Range<float>(ref.state->binF0[0],
                                   ref.state->binF0[numBins() - 1]);
@@ -55,7 +57,7 @@ public:
       }
     }
 
-    juce::Range<unsigned> grainsForBin(unsigned bin) const {
+    forcedinline juce::Range<unsigned> grainsForBin(unsigned bin) const {
       if (bin < numBins()) {
         return juce::Range<unsigned>(ref.state->binX[bin],
                                      ref.state->binX[bin + 1]);
@@ -64,9 +66,17 @@ public:
       }
     }
 
+    forcedinline unsigned closestBinForPitch(float hz) const {
+      auto begin = ref.state->binF0.begin(), end = ref.state->binF0.end();
+      unsigned bin1 = std::lower_bound(begin, end, hz) - begin;
+      unsigned bin0 = bin1 - 1;
+      float dist0 = fabs(pitchForBin(bin0) - hz);
+      float dist1 = fabs(pitchForBin(bin1) - hz);
+      return (dist0 < dist1) ? bin0 : bin1;
+    }
+
     juce::String describeToString() const;
     juce::String numSamplesToString() const;
-    unsigned closestBinForPitch(float hz) const;
 
   private:
     GrainData &ref;

@@ -44,18 +44,10 @@ bool GrainData::Accessor::read(float *const *destChannels, int numDestChannels,
   }
 }
 
-unsigned GrainData::Accessor::closestBinForPitch(float hz) const {
-  auto begin = ref.state->binF0.begin(), end = ref.state->binF0.end();
-  unsigned bin1 = std::lower_bound(begin, end, hz) - begin;
-  unsigned bin0 = bin1 - 1;
-  float dist0 = fabs(pitchForBin(bin0) - hz);
-  float dist1 = fabs(pitchForBin(bin1) - hz);
-  return (dist0 < dist1) ? bin0 : bin1;
-}
-
 String GrainData::Accessor::describeToString() const {
-  return String(numGrains()) + " grains, " + String(maxGrainWidth(), 1) +
-         " sec, " + String(pitchRange().getStart(), 1) + " - " +
+  return String(numGrains()) + " grains, " + String(numBins()) + " bins, " +
+         String(maxGrainWidth(), 1) + " sec, " +
+         String(pitchRange().getStart(), 1) + " - " +
          String(pitchRange().getEnd(), 1) + " Hz, " + numSamplesToString();
 }
 
