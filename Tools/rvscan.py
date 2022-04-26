@@ -6,19 +6,25 @@ import multiprocessing, argparse
 import numpy as np
 from tqdm import tqdm
 
+default_sr = 24000
+default_vprob = 0.99
+default_fmin = librosa.note_to_hz('C1')
+default_fmax = librosa.note_to_hz('C6')
+default_res = 0.05
+
 parser = argparse.ArgumentParser(description=
         'Run pitch detection on batches of audio files, output an uncompressed grain database')
 
-parser.add_argument('--sr', dest='sr', metavar='HZ', type=int, default=24000,
-                    help='sample rate to process and store at [24000]')
-parser.add_argument('--vprob', dest='vprob', metavar='P', type=float, default=0.99,
-                    help='minimum voicing probability [0.99]')
-parser.add_argument('--fmin', dest='fmin', metavar='HZ', type=float, default=librosa.note_to_hz('C1'),
-                    help='lowest pitch to detect, in hz [=C1]')
-parser.add_argument('--fmax', dest='fmax', metavar='HZ', type=float, default=librosa.note_to_hz('C6'),
-                    help='highest pitch to detect, in hz [=C6]')
-parser.add_argument('--res', dest='res', metavar='ST', type=float, default=0.05,
-                    help='pitch detection resolution in semitones [0.05]')
+parser.add_argument('--sr', dest='sr', metavar='HZ', type=int, default=default_sr,
+                    help=f'sample rate to process and store at [{default_sr}]')
+parser.add_argument('--vprob', dest='vprob', metavar='P', type=float, default=default_vprob,
+                    help=f'minimum voicing probability [{default_vprob}]')
+parser.add_argument('--fmin', dest='fmin', metavar='HZ', type=float, default=default_fmin,
+                    help=f'lowest pitch to detect, in hz [{default_fmin}]')
+parser.add_argument('--fmax', dest='fmax', metavar='HZ', type=float, default=default_fmax,
+                    help=f'highest pitch to detect, in hz [{default_fmax}]')
+parser.add_argument('--res', dest='res', metavar='ST', type=float, default=default_res,
+                    help=f'pitch detection resolution in semitones [{default_res}]')
 
 parser.add_argument('inputs', metavar='SRC', nargs='+',
                     help='directory with sound files to choose from')
