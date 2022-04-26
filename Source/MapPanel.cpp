@@ -10,7 +10,15 @@ using juce::uint64;
 class MapLayout {
 public:
   MapLayout(const Rectangle<float> &bounds, const GrainData::Accessor &gda)
-      : bounds(bounds), gda(gda) {}
+      : bounds(bounds), gda(gda) {
+    pitchRange = gda.pitchRange();
+    if (pitchRange.isEmpty()) {
+      logPitchRatio = 0.f;
+    } else {
+      float pitchRatio = pitchRange.getEnd() / pitchRange.getStart();
+      logPitchRatio = log(pitchRatio);
+    }
+  }
 
   struct PointInfo {
     bool valid;
@@ -24,15 +32,8 @@ public:
 
       // X axis: logarithmic pitch
       float relX = (p.x - bounds.getX()) / (bounds.getWidth() - 1);
-      auto pitches = gda.pitchRange();
-      if (pitches.isEmpty()) {
-        result.bin = 0;
-      } else {
-        float lowEnd = pitches.getStart();
-        float highRatio = pitches.getEnd() / lowEnd;
-        float hz = lowEnd * exp(relX * log(highRatio));
-        result.bin = gda.closestBinForPitch(hz);
-      }
+      result.bin = gda.closestBinForPitch(pitchRange.getStart() *
+                                          exp(relX * logPitchRatio));
 
       // Y axis: linear grain selector, variable resolution
       auto gr = gda.grainsForBin(result.bin);
@@ -48,6 +49,8 @@ public:
 private:
   Rectangle<float> bounds;
   const GrainData::Accessor &gda;
+  juce::Range<float> pitchRange;
+  float logPitchRatio;
 };
 
 MapPanel::MapPanel(AudioProcessor &p) : audioProcessor(p) {
