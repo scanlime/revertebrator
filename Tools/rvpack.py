@@ -1,188 +1,168 @@
 #!/usr/bin/env python3
 
-import librosa
-import argparse, json, glob, base64, time
-import matplotlib.pyplot as plt
+import librosa, soundfile
+import os, argparse, json, time, zipfile, tempfile, shutil
 import numpy as np
-from glob import glob
 from tqdm import tqdm
+
+default_res = 0.01
+default_width = 3.0
 
 parser = argparse.ArgumentParser(description=
         'Build a compressed grain database from multiple uncompressed inputs')
 
-parser.add_argument('--res', dest='res', metavar='ST', type=float, default=0.01,
-                    help='pitch binning resolution in semitones [0.01]')
+parser.add_argument('--res', dest='res', metavar='ST', type=float, default=default_res,
+                    help=f'pitch binning resolution in semitones [{default_res}]')
 parser.add_argument('--min', dest='min', metavar='N', type=int, default=1,
                     help='discard bins with fewer than this minimum number of grains')
 
 parser.add_argument('inputs', metavar='SRC', nargs='+',
                     help='one or more npz files produced by rvscan')
-parser.add_argument('-w', metavar='S', dest='width', type=float, default=3.0,
-                    help='maximum grain width in seconds [3.0]')
-parser.add_argument('-n', metavar='N', dest='max', type=int, default=128,
-                    help='maximum number of grains per bin [128]')
+parser.add_argument('-w', metavar='S', dest='width', type=float, default=default_width,
+                    help=f'maximum grain width in seconds [{default_width}]')
+parser.add_argument('-n', metavar='N', dest='max', type=int,
+                    help='maximum number of grains per bin [no limit]')
 parser.add_argument('-o', metavar='DEST', dest='output',
                     help='name of packed output file [voice-###.rvv]')
 args = parser.parse_args()
-output_name = args.output or time.strftime('voice-%Y%m%d%H%M.rvv')
 
-# Build combined grain index
-voices = [np.load(f, mmap_mode='r') for f in args.inputs]
-sr = int(voices[0]['sr'])
-max_grain_sr = int(args.width * sr)
+inputs = [np.load(f, mmap_mode='r') for f in args.inputs]
 
-gf0, gv, gx = [], [], []
-for v, grains in enumerate(tqdm(voices)):
-    print(voice_names[v])
-    vgx = grains['x']
-    vgf0 = grains['f0']
-    vylen = int(grains['ylen'])
-    
-    # Just for evaluation purposes, show the spectral contribution from each input file
-    plt.figure()
-    plt.title(voice_names[v])
-    plt.xlabel('hz')
-    plt.ylabel('grains')
-    plt.hist(vgf0, 1000, histtype='stepfilled', log=True) 
-    
-    # Discard grains that will cross the boundary between voices
-    range_filter = (vgx > max_grain_sr) & (vgx < (vylen - max_grain_sr - 1))
-    vgx = vgx[range_filter]
-    vgf0 = vgf0[range_filter]
-    
-    gx.append(vgx)
-    gf0.append(vgf0)
-    gv.append(np.full(vgf0.shape, v))
+def find_common_sample_rate():
+    rates = [npz['sr'] for npz in inputs]
+    if max(rates) != min(rates):
+        raise ValueError(f'Inputs have inconsistent sample rates: {rates}')
+    return int(rates[0])
 
-gf0, gv, gx = map(np.concatenate, (gf0, gv, gx))
-k = np.lexsort((gx, gv, gf0))
-gf0, gv, gx = gf0[k], gv[k], gx[k]
+sr = find_common_sample_rate()
+width_in_samples = int(args.width * sr)
 
-# Examine the frequency distribution of the combined index.
-# These buckets will be smaller than the pitch buckets in pyin()
-plt.title('Combined f0 spectrum')
-plt.xlabel('mels')
-max_frequency_bins = int(np.ceil(12 * gf0[-1]/gf0[0] / args.res))
-hist, bins, _ = plt.hist(librosa.hz_to_mel(gf0, htk=True), max_frequency_bins, histtype='step', log=True)
-bins = librosa.mel_to_hz(bins, htk=True)
+def build_combined_grain_index():
+    f0, gx, ii, total_grains = [], [], [], 0
+    for i, npz in enumerate(tqdm(inputs)):
+        if0, igx, iylen = npz['f0'], npz['x'], int(npz['ylen'])
+        assert len(if0) == len(igx)
+        total_grains += len(igx)
 
-# Sample at most max_grains_per_bin for a compacted grain index.
-# Each bin is assigned a single f0, and the different grains within
-# that bin can be selected at playback time.
+        # Discard grains that will touch the boundary between inputs
+        a = (igx > width_in_samples) & (igx < (iylen - width_in_samples - 1));
+        if0, igx = if0[a], igx[a]
 
-# To do: might want to intentionally choose a particular distribution
-# of grains to keep, right now it is a uniform sample from the input,
-# so the relative space taken up by different voices will depend on
-# how many grains we have saved from those voices.
+        f0.append(if0)
+        gx.append(igx)
+        ii.append(np.full(if0.shape, i))
 
-# Combined grain index: f0, voice selector, sample location
-cgf0, cgv, cgx = [], [], []
+    f0, gx, ii = map(np.concatenate, (f0, gx, ii))
+    a = np.lexsort((gx, ii, f0))
+    f0, gx, ii = f0[a], gx[a], ii[a]
+    return f0, gx, ii, total_grains
 
-# Bin index: f0, first grain, number of grains
-bf0, bx = [], []
+f0, gx, ii, total_grains = build_combined_grain_index()
+tqdm.write(f'Indexing {total_grains} total grains')
 
-rng = np.random.default_rng()
-bin_x = np.searchsorted(gf0, bins)
-next_bx = 0
+def build_compact_index():
+    rng = np.random.default_rng()
 
-for bin_id, bin_size in enumerate(bin_x[1:] - bin_x[:-1]):
-    # Choose grains
-    choices = np.arange(bin_x[bin_id], bin_x[bin_id+1])
-    rng.shuffle(choices)
-    choices = choices[:args.max]
-    choices.sort()
-    
-    # Skip empty or underfull bins
-    if len(choices) < args.min:
-        continue
-    
-    # Save chosen grains
-    for c, o in ((cgf0, gf0), (cgv, gv), (cgx, gx)):
-        c.append(o[choices])
+    # Allocate small frequency bins spaced evenly in the mel scale
+    f0_range = (f0[0] - .1, f0[-1] + .1)
+    max_bins = int(np.ceil(12 * f0_range[1] / f0_range[0] / args.res))
+    mel_range = librosa.hz_to_mel(f0_range, htk=True)
+    mel_bins = np.linspace(mel_range[0], mel_range[1], max_bins+1)
+    bins = librosa.mel_to_hz(mel_bins, htk=True)
+    bin_x = np.searchsorted(f0, bins)
 
-    # Update bin index
-    bf0.append(cgf0[-1].mean())
+    cf0, cgx, cii, bf0, bx = [], [], [], [], []
+    next_bx = 0
+    for bin_id in range(len(bins)-1):
+
+        # Choose grains randomly if we have more than requested
+        choices = np.arange(bin_x[bin_id], bin_x[bin_id+1])
+        rng.shuffle(choices)
+        choices = choices[:args.max]
+        choices.sort()
+
+        # Skip empty or underfull bins
+        if len(choices) < max(1, args.min):
+            continue
+
+        # Save chosen grains
+        for c, o in ((cf0, f0), (cgx, gx), (cii, ii)):
+            c.append(o[choices])
+
+        # Update bin index
+        bf0.append(cf0[-1].mean())
+        bx.append(next_bx)
+        next_bx += len(choices)
+
     bx.append(next_bx)
-    next_bx += len(choices)
-bx.append(next_bx)
-    
-bx = np.asarray(bx)
-cgf0, cgv, cgx = map(np.concatenate, (cgf0, cgv, cgx))
+    cf0, cgx, cii = map(np.concatenate, (cf0, cgx, cii))
+    return cf0, cgx, cii, bf0, bx
 
-plt.figure()
-plt.title('Grains per bin')
-plt.xlabel('grains')
-plt.hist(bx[1:] - bx[:-1], 100, log=True)
+cf0, cgx, cii, bf0, bx = build_compact_index()
+tqdm.write(f'Using {len(cf0)} grains ({len(cf0)/total_grains:.2%}) in {len(bf0)} bins')
+assert len(cf0) == len(cgx)
+assert len(cf0) == len(cii)
+assert len(bf0)+1 == len(bx)
 
-# This should give us a frequency distribution with the peaks shaved down
-plt.figure()
-plt.title('Compacted f0 spectrum')
-plt.xlabel('mels')
-plt.hist(librosa.hz_to_mel(cgf0, htk=True), max_frequency_bins, histtype='step')
+# The next step is to collect audio data in order and make another table
+# with the final location of each grain. This is where the final compressed
+# output is written to disk, as 16-bit FLAC inside an uncompressed ZIP wrapper.
+# The grain data is a binary file in this ZIP, and everything else goes into JSON.
 
-print(f'Using {len(cgf0)} grains out of {len(gf0)} ({len(cgf0)/len(gf0):.2%})')
-print(f'Using {len(bf0)} frequency bins')
+def collect_audio_data(file):
+    yy_ptr = 0
+    yygx = np.full(cgx.shape, -1)
 
-# Collect audio data
-
-yy_ptr = 0
-yygx = np.full(cgx.shape, -1)
-distance_maps = []
-
-with sf.SoundFile(output_sound_file, 'w', sr, 1, 'PCM_16') as yy:
-    
-    # One input file at a time
-    for v, grains in enumerate(tqdm(voices)):
-        vact = cgv == v
-        vylen = int(grains['ylen'])
-        vgx = cgx[vact]
-        vgx_sort = np.argsort(vgx)
+    for i, npz in enumerate(tqdm(inputs)):
+        # Look at grains that are active in one input file at a time
+        iact = cii == i
+        iylen = int(npz['ylen'])
+        igx = cgx[iact]
+        igx_sort = np.argsort(igx)
 
         # Skip input files with zero grains in use
-        if len(vgx) < 1:
+        if len(igx) < 1:
             continue
 
         # Figure out which audio samples are actually in use by looking
         # at the distance between each sample and its closest grain.
         chunk_size = 256*1024
         xxact = []
-        for chunk in tqdm(range(0, vylen, chunk_size)):
-            xact = np.arange(chunk, min(vylen, chunk+chunk_size), dtype=np.int64)
-            nearest_grains = vgx_sort.take(np.searchsorted(vgx, xact, sorter=vgx_sort)[:,np.newaxis] + [[-1,0]], mode='clip')
-            distance = np.amin(np.abs(xact[:, np.newaxis] - vgx[nearest_grains]), axis=1)
-            xact = xact[distance <= max_grain_sr]
-            distance_maps.append(distance.min())
+        for chunk in tqdm(range(0, iylen, chunk_size)):
+            xact = np.arange(chunk, min(iylen, chunk+chunk_size), dtype=np.int64)
+            nearest_grains = igx_sort.take(np.searchsorted(igx, xact, sorter=igx_sort)[:,np.newaxis] + [[-1,0]], mode='clip')
+            distance = np.amin(np.abs(xact[:, np.newaxis] - igx[nearest_grains]), axis=1)
+            xact = xact[distance <= width_in_samples]
             xxact.append(xact)
-            del distance
-            del nearest_grains
-            del xact
         xxact = np.concatenate(xxact)
-    
+
         # Updated locations in the grain index
-        yygx[vact] = np.searchsorted(xxact, vgx) + yy_ptr
+        yygx[iact] = np.searchsorted(xxact, igx) + yy_ptr
         yy_ptr += len(xxact)
-        print(f'{voice_names[v]} using {len(xxact)} samples, {len(xxact)/vylen:.2%}')
+        tqdm.write(f'{args.inputs[i]} using {len(xxact)} samples, {len(xxact)/iylen:.2%}')
 
         # Writing samples
-        print('writing samples..', end=' ')
-        yy.write(np.round(grains['y'][xxact] * 0x7fff).astype(np.int16))
-        print('ok')
-        del xxact
-    
-print(f'{yy_ptr} samples total')
+        tqdm.write('writing samples..', end=' ')
+        file.write(np.round(npz['y'][xxact] * 0x7fff).astype(np.int16))
+        tqdm.write('ok')
 
+    tqdm.write(f'{yy_ptr} samples total')
+    return yygx, {
+        'sound_len': yy_ptr,
+        'max_grain_width': args.width,
+        'sample_rate': sr,
+        'bin_x': list(map(int, bx)),
+        'bin_f0': list(map(float, bf0))
+    }
 
-# Write out the index to JSON
-index = {
-    'sound_file': output_sound_file,
-    'sound_len': yy_ptr,
-    'max_grain_width': max_grain_width,
-    'sample_rate': sr,
-    'bin_x': list(map(int, bx)),
-    'bin_f0': list(map(float, bf0)),
-    'grain_x': base64.b64encode(yygx.astype('<u8').tobytes()).decode('ascii'),
-}
-
-json.dump(index, open(output_index_file, 'w'))
-print('Saved')
-
+filename = args.output or time.strftime('voice-%Y%m%d%H%M.rvv')
+with zipfile.ZipFile(filename, 'x', zipfile.ZIP_STORED) as z:
+    with tempfile.TemporaryFile(dir=os.path.dirname(filename)) as tmp:
+        with soundfile.SoundFile(tmp, 'w', sr, 1, 'PCM_16', format='flac') as sound:
+            yygx, index = collect_audio_data(sound)
+        z.writestr('index.json', json.dumps(index)+'\n', zipfile.ZIP_DEFLATED, 9)
+        z.writestr('grains.u64', yygx.astype('<u8').tobytes(), zipfile.ZIP_DEFLATED, 9)
+        with z.open('sound.flac', 'w', force_zip64=True) as f:
+            tmp.seek(0)
+            shutil.copyfileobj(tmp, f, 1024 * 1024)
+tqdm.write(f'Completed {filename}')
