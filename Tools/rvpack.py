@@ -160,9 +160,9 @@ with zipfile.ZipFile(filename, 'x', zipfile.ZIP_STORED) as z:
     with tempfile.TemporaryFile(dir=os.path.dirname(filename)) as tmp:
         with soundfile.SoundFile(tmp, 'w', sr, 1, 'PCM_16', format='flac') as sound:
             yygx, index = collect_audio_data(sound)
-        z.writestr('index.json', json.dumps(index)+'\n', zipfile.ZIP_DEFLATED, 9)
-        z.writestr('grains.u64', yygx.astype('<u8').tobytes(), zipfile.ZIP_DEFLATED, 9)
-        with z.open('sound.flac', 'w', force_zip64=True) as f:
+        z.writestr(zipfile.ZipInfo('index.json'), json.dumps(index)+'\n', zipfile.ZIP_DEFLATED, 9)
+        z.writestr(zipfile.ZipInfo('grains.u64'), yygx.astype('<u8').tobytes(), zipfile.ZIP_DEFLATED, 9)
+        with z.open(zipfile.ZipInfo('sound.flac'), 'w', force_zip64=True) as f:
             tmp.seek(0)
             shutil.copyfileobj(tmp, f, 1024 * 1024)
 tqdm.write(f'Completed {filename}')
