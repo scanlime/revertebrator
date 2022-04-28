@@ -8,6 +8,7 @@ from tqdm import tqdm
 default_res = 0.01
 default_min = 3
 default_width = 3.0
+default_mark = 6
 
 parser = argparse.ArgumentParser(
     description="Build a compressed grain database from multiple uncompressed inputs"
@@ -29,7 +30,14 @@ parser.add_argument(
     default=default_min,
     help=f"discard bins with fewer than this minimum number of grains [{default_min}]",
 )
-
+parser.add_argument(
+    "--mark",
+    dest="mark",
+    metavar="N",
+    type=int,
+    default=default_mark,
+    help=f"mark discontinuities with an N sample long beep [{default_mark}]",
+)
 parser.add_argument(
     "inputs", metavar="SRC", nargs="+", help="one or more npz files produced by rvscan"
 )
@@ -152,6 +160,10 @@ def collect_audio_data(file):
     ixsort = np.lexsort((cgx, cii))
     imemo = {}
     samples_per_input = {}
+    marker = (pow(-1, np.arange(0, args.mark)) * 0x4000).astype(np.int16)
+
+    file.write(marker)
+    yy_ptr += len(marker)
 
     for grain in tqdm(ixsort, unit="grain", unit_scale=True):
         i, x = cii[grain], cgx[grain]
@@ -159,13 +171,16 @@ def collect_audio_data(file):
             tqdm.write(f"Reading {args.inputs[i]}")
             imemo = dict(i=i, y=inputs[i]["y"], end=0)
 
+        # Copy the portion that doesn't overlap what we already copied
         grain_begin = x - width_in_samples
         grain_end = x + width_in_samples
         assert grain_begin >= 0 and grain_end < len(imemo["y"])
-
-        # Copy the portion that doesn't overlap what we already copied
         grain_begin = max(grain_begin, imemo["end"])
-        imemo["end"] = grain_end
+
+        if grain_begin != imemo["end"]:
+            # Optionally mark the discontinuity
+            file.write(marker)
+            yy_ptr += len(marker)
 
         # Updated locations in the grain index
         assert width_in_samples <= x and x < grain_end
@@ -175,6 +190,10 @@ def collect_audio_data(file):
         file.write(y)
         yy_ptr += len(y)
         samples_per_input[i] = samples_per_input.get(i, 0) + len(y)
+        imemo["end"] = grain_end
+
+    file.write(marker)
+    yy_ptr += len(marker)
 
     for i, name in enumerate(args.inputs):
         active = samples_per_input[i]
