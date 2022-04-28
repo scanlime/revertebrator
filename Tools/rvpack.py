@@ -8,7 +8,7 @@ from tqdm import tqdm
 default_res = 0.01
 default_min = 3
 default_width = 3.0
-default_mark = 6
+default_mark = 8
 
 parser = argparse.ArgumentParser(
     description="Build a compressed grain database from multiple uncompressed inputs"
@@ -36,7 +36,7 @@ parser.add_argument(
     metavar="N",
     type=int,
     default=default_mark,
-    help=f"mark discontinuities with an N sample long beep [{default_mark}]",
+    help=f"mark discontinuities with an N sample long noise [{default_mark}]",
 )
 parser.add_argument(
     "inputs", metavar="SRC", nargs="+", help="one or more npz files produced by rvscan"
@@ -160,7 +160,7 @@ def collect_audio_data(file):
     ixsort = np.lexsort((cgx, cii))
     imemo = {}
     samples_per_input = {}
-    marker = (pow(-1, np.arange(0, args.mark)) * 0x4000).astype(np.int16)
+    marker = (pow(-1, np.arange(0, args.mark)) * 0x7FFF).astype(np.int16)
 
     file.write(marker)
     yy_ptr += len(marker)
