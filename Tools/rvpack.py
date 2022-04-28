@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 
 default_res = 0.01
+default_min = 3
 default_width = 3.0
 
 parser = argparse.ArgumentParser(
@@ -25,8 +26,8 @@ parser.add_argument(
     dest="min",
     metavar="N",
     type=int,
-    default=1,
-    help="discard bins with fewer than this minimum number of grains",
+    default=default_min,
+    help=f"discard bins with fewer than this minimum number of grains [{default_min}]",
 )
 
 parser.add_argument(
