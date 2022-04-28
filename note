@@ -1,0 +1,25 @@
+- ui niceness
+   - very basic window graph, so we stop having awkward blank space
+   - improved color scheme for map image
+
+- performance improvements for rvpack
+
+- testing the limits of the storage layer
+
+   - more visibility into actual performance via the UI
+       - measure disk bandwidth, CPU and RAM usage, count dropouts
+
+   - sad ZIP64
+
+   - juce FLAC reader 2GB limit debugging
+       - this path seems intended to support large files, but seeks seem to be getting messed up somewhere.
+       - likely interacts with ZIP container task below
+
+   - kicking the tires on the BufferingAudioFormatReader in juce
+       - small and large datasets, fast and slow storage devices.
+       - make sure failure modes are as expected
+
+- next steps in audio synth
+
+   - figure out boundary between per-note and per-grain processing
+   - map design onto juce::Synthesizer
