@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import librosa, soundfile
-import os, argparse, json, time, zipfile, tempfile, shutil
+import os, argparse, json, time, zipfile, tempfile
 import numpy as np
 from tqdm import tqdm
 
@@ -56,7 +56,7 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-inputs = [np.load(f, mmap_mode="r") for f in args.inputs]
+inputs = [np.load(f) for f in args.inputs]
 
 
 def find_common_sample_rate():
@@ -153,10 +153,10 @@ def collect_audio_data(file):
     imemo = {}
     samples_per_input = {}
 
-    for grain in tqdm(ixsort):
+    for grain in tqdm(ixsort, unit="grain", unit_scale=True):
         i, x = cii[grain], cgx[grain]
         if i != imemo.get("i"):
-            tqdm.write(f"Collecting audio from {args.inputs[i]}")
+            tqdm.write(f"Reading {args.inputs[i]}")
             imemo = dict(i=i, y=inputs[i]["y"], end=0)
 
         grain_begin = x - width_in_samples
@@ -176,7 +176,6 @@ def collect_audio_data(file):
         yy_ptr += len(y)
         samples_per_input[i] = samples_per_input.get(i, 0) + len(y)
 
-    tqdm.write(f"{yy_ptr} samples total")
     for i, name in enumerate(args.inputs):
         active = samples_per_input[i]
         total = inputs[i]["ylen"]
@@ -196,6 +195,11 @@ with zipfile.ZipFile(filename, "x", zipfile.ZIP_STORED) as z:
     with tempfile.TemporaryFile(dir=os.path.dirname(filename)) as tmp:
         with soundfile.SoundFile(tmp, "w", sr, 1, "PCM_16", format="flac") as sound:
             yygx, index = collect_audio_data(sound)
+
+        tmp.seek(0, os.SEEK_END)
+        tmpLen = tmp.tell()
+        tmp.seek(0)
+
         z.writestr(
             zipfile.ZipInfo("index.json"),
             json.dumps(index) + "\n",
@@ -209,6 +213,12 @@ with zipfile.ZipFile(filename, "x", zipfile.ZIP_STORED) as z:
             9,
         )
         with z.open(zipfile.ZipInfo("sound.flac"), "w", force_zip64=True) as f:
-            tmp.seek(0)
-            shutil.copyfileobj(tmp, f, 1024 * 1024)
+            with tqdm(total=tmpLen, unit="byte", unit_scale=True) as progress:
+                while True:
+                    block = tmp.read(1024 * 1024)
+                    if not block:
+                        break
+                    f.write(block)
+                    progress.update(len(block))
+
 tqdm.write(f"Completed {filename}")
