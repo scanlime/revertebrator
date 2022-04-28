@@ -2,8 +2,6 @@
    - very basic window graph, so we stop having awkward blank space
    - improved color scheme for map image
 
-- performance improvements for rvpack
-
 - testing the limits of the storage layer
 
    - more visibility into actual performance via the UI
