@@ -55,17 +55,22 @@ private:
 
 static std::unique_ptr<juce::Image> renderImage(const MapImage::Request &req,
                                                 GrainData &grainData) {
-  std::mt19937 prng;
-  auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
-  auto image = std::make_unique<Image>(Image::RGB, width, height, false);
   GrainData::Accessor gda(grainData);
+  auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
+  if (!(width > 0 && height > 0 && gda.numSamples() && gda.numBins() &&
+        gda.numGrains())) {
+    return nullptr;
+  }
+
+  auto image = std::make_unique<Image>(Image::RGB, width, height, false);
   auto layout = MapLayout(req.bounds.toFloat(), gda);
   Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
+  std::mt19937 prng;
+  constexpr int sampleGridSize = 4;
 
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
       Point<float> pixelLoc(x, y);
-      constexpr int sampleGridSize = 4;
       float accum = 0.f;
 
       for (int sy = 0; sy < sampleGridSize; sy++) {
