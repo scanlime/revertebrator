@@ -72,7 +72,7 @@ width_in_samples = int(args.width * sr)
 
 def build_combined_grain_index():
     f0, gx, ii, total_grains = [], [], [], 0
-    for i, npz in enumerate(tqdm(inputs)):
+    for i, npz in enumerate(inputs):
         if0, igx, iylen = npz["f0"], npz["x"], int(npz["ylen"])
         assert len(if0) == len(igx)
         total_grains += len(igx)
@@ -85,6 +85,7 @@ def build_combined_grain_index():
         gx.append(igx)
         ii.append(np.full(if0.shape, i))
 
+    # Sorting, first by f0 and then by the final grain location (i, x)
     f0, gx, ii = map(np.concatenate, (f0, gx, ii))
     a = np.lexsort((gx, ii, f0))
     f0, gx, ii = f0[a], gx[a], ii[a]
@@ -129,63 +130,58 @@ def build_compact_index():
         bx.append(next_bx)
         next_bx += len(choices)
 
+    if not len(cgx):
+        raise ValueError("No grains left in compacted data")
     bx.append(next_bx)
-    cf0, cgx, cii = map(np.concatenate, (cf0, cgx, cii))
-    return cf0, cgx, cii, bf0, bx
+    cgx, cii = map(np.concatenate, (cgx, cii))
+    return cgx, cii, bf0, bx
 
 
-cf0, cgx, cii, bf0, bx = build_compact_index()
-tqdm.write(f"Using {len(cf0)} grains ({len(cf0)/total_grains:.2%}) in {len(bf0)} bins")
-assert len(cf0) == len(cgx)
-assert len(cf0) == len(cii)
+cgx, cii, bf0, bx = build_compact_index()
+tqdm.write(f"Using {len(cgx)} grains ({len(cgx)/total_grains:.2%}) in {len(bf0)} bins")
+assert len(cgx) == len(cii)
 assert len(bf0) + 1 == len(bx)
 
 
 def collect_audio_data(file):
+    # The compact index we have is sorted in f0 order.
+    # Figure out a new ordering sorted by input file, and collect those grains
+
     yy_ptr = 0
     yygx = np.full(cgx.shape, -1)
+    ixsort = np.lexsort((cgx, cii))
+    imemo = {}
+    samples_per_input = {}
 
-    for i, npz in enumerate(tqdm(inputs)):
-        # Look at grains that are active in one input file at a time
-        iact = cii == i
-        iylen = int(npz["ylen"])
-        igx = cgx[iact]
-        igx_sort = np.argsort(igx)
+    for grain in tqdm(ixsort):
+        i, x = cii[grain], cgx[grain]
+        if i != imemo.get("i"):
+            tqdm.write(f"Collecting audio from {args.inputs[i]}")
+            imemo = dict(i=i, y=inputs[i]["y"], end=0)
 
-        # Skip input files with zero grains in use
-        if len(igx) < 1:
-            continue
+        grain_begin = x - width_in_samples
+        grain_end = x + width_in_samples
+        assert grain_begin >= 0 and grain_end < len(imemo["y"])
 
-        # Figure out which audio samples are actually in use by looking
-        # at the distance between each sample and its closest grain.
-        chunk_size = 256 * 1024
-        xxact = []
-        for chunk in tqdm(range(0, iylen, chunk_size)):
-            xact = np.arange(chunk, min(iylen, chunk + chunk_size), dtype=np.int64)
-            nearest_grains = igx_sort.take(
-                np.searchsorted(igx, xact, sorter=igx_sort)[:, np.newaxis] + [[-1, 0]],
-                mode="clip",
-            )
-            distance = np.amin(
-                np.abs(xact[:, np.newaxis] - igx[nearest_grains]), axis=1
-            )
-            xact = xact[distance <= width_in_samples]
-            xxact.append(xact)
-        xxact = np.concatenate(xxact)
+        # Copy the portion that doesn't overlap what we already copied
+        grain_begin = max(grain_begin, imemo["end"])
+        imemo["end"] = grain_end
 
         # Updated locations in the grain index
-        yygx[iact] = np.searchsorted(xxact, igx) + yy_ptr
-        yy_ptr += len(xxact)
-        tqdm.write(
-            f"{args.inputs[i]} using {len(xxact)} samples, {len(xxact)/iylen:.2%}"
-        )
+        assert width_in_samples <= x and x < grain_end
+        yygx[grain] = yy_ptr + x - grain_begin
 
-        # Writing samples
-        tqdm.write("writing samples..", end=" ")
-        file.write(np.round(npz["y"][xxact] * 0x7FFF).astype(np.int16))
-        tqdm.write("ok")
+        y = np.round(imemo["y"][grain_begin:grain_end] * 0x7FFF).astype(np.int16)
+        file.write(y)
+        yy_ptr += len(y)
+        samples_per_input[i] = samples_per_input.get(i, 0) + len(y)
 
     tqdm.write(f"{yy_ptr} samples total")
+    for i, name in enumerate(args.inputs):
+        active = samples_per_input[i]
+        total = inputs[i]["ylen"]
+        tqdm.write(f"{name} using {active} samples, {active/total:.2%}")
+
     return yygx, {
         "sound_len": yy_ptr,
         "max_grain_width": args.width,
