@@ -89,7 +89,7 @@ private:
   juce::String load(const juce::File &);
 
   struct State {
-    juce::File srcFile, soundFile;
+    std::unique_ptr<juce::ZipFile> zip;
     std::unique_ptr<juce::AudioFormatReader> reader;
     juce::uint64 soundLen;
     float maxGrainWidth;
@@ -100,6 +100,7 @@ private:
   };
 
   juce::TimeSliceThread loadingThread;
+  juce::String latestLoadingAttempt;
 
   juce::CriticalSection valuesMutex;
   juce::Value srcValue, statusValue;

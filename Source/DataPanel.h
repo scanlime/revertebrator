@@ -15,7 +15,7 @@ private:
   juce::Value grainDataSrc, grainDataStatus;
   juce::Label info;
   juce::FilenameComponent filename{
-      {}, {}, false, false, false, "*.json", "", "Open a grain data file..."};
+      {}, {}, false, false, false, "*.rvv", "", "Choose grain data..."};
 
   void filenameComponentChanged(juce::FilenameComponent *) override;
   void valueChanged(juce::Value &) override;

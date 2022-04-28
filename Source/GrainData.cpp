@@ -80,22 +80,17 @@ void GrainData::valueChanged(juce::Value &) {
 }
 
 int GrainData::useTimeSlice() {
-  String srcToLoad, latestLoadedSrc;
+  String srcToLoad;
   {
     juce::ScopedLock sl(valuesMutex);
     srcToLoad = srcValue.toString();
   }
-  {
-    juce::ScopedReadLock reader(stateMutex);
-    if (state) {
-      latestLoadedSrc = state->srcFile.getFullPathName();
-    }
-  }
-  if (srcToLoad == latestLoadedSrc) {
+  if (srcToLoad == latestLoadingAttempt) {
     // Idle
     return -1;
   }
 
+  latestLoadingAttempt = srcToLoad;
   String newStatus = load(srcToLoad);
   {
     juce::ScopedLock sl(valuesMutex);
@@ -106,80 +101,90 @@ int GrainData::useTimeSlice() {
 }
 
 juce::String GrainData::load(const juce::File &srcFile) {
+  auto result = std::make_unique<State>();
+
   if (!srcFile.existsAsFile()) {
     return "No grain data file";
   }
-  auto json = JSON::parse(srcFile);
-  if (!json.isObject()) {
-    return "Failed to load JSON data!";
+  result->zip = std::make_unique<juce::ZipFile>(srcFile);
+
+  int entryIndex = result->zip->getIndexOfFileName("index.json");
+  int entryGrains = result->zip->getIndexOfFileName("grains.u64");
+  int entrySound = result->zip->getIndexOfFileName("sound.flac");
+  if (entryIndex < 0 || entryGrains < 0 || entrySound < 0) {
+    return "Wrong file format, failed to understand archive";
   }
 
-  auto newState = std::make_unique<State>();
-  newState->srcFile = srcFile;
-  newState->soundFile =
-      srcFile.getSiblingFile(json.getProperty("sound_file", var()).toString());
-  newState->soundLen = uint64(int64(json.getProperty("sound_len", var())));
-  newState->maxGrainWidth = json.getProperty("max_grain_width", var());
-  newState->sampleRate =
-      unsigned(int64(json.getProperty("sample_rate", var())));
+  var json;
+  {
+    auto stream = std::unique_ptr<juce::InputStream>(
+        result->zip->createStreamForEntry(entryIndex));
+    if (stream) {
+      json = JSON::parse(*stream);
+    }
+  }
+  if (!json.isObject()) {
+    return "Failed to load JSON index within grain archive";
+  }
+  result->soundLen = uint64(int64(json.getProperty("sound_len", var())));
+  result->maxGrainWidth = json.getProperty("max_grain_width", var());
+  result->sampleRate = unsigned(int64(json.getProperty("sample_rate", var())));
   auto varBinX = json.getProperty("bin_x", var());
   auto varBinF0 = json.getProperty("bin_f0", var());
-  auto varGrainX = json.getProperty("grain_x", var());
-
-  if (!newState->soundFile.existsAsFile()) {
-    return "Can't find sound file: " + newState->soundFile.getFullPathName();
-  }
-
-  juce::AudioFormatManager formats;
-  formats.registerBasicFormats();
-  auto formatReader = formats.createReaderFor(newState->soundFile);
-  if (!formatReader) {
-    return "Can't read from sound file";
-  }
-
-  // Keep the buffer smallish until BufferingAudioReader is more efficient.
-  // The balance here now is that the buffer chews CPU if it has many blocks,
-  // the block size is not adjustable, and too small a buffer will cause us
-  // to read samples we don't actually have space to store when playing many
-  // overlapping grains.
-
-  const int64 bufferSize = 0; // 8 * 1024 * 1024;
-  if (bufferSize > 0) {
-    auto buffer = std::make_unique<juce::BufferingAudioReader>(
-        formatReader, loadingThread, bufferSize);
-    buffer->setReadTimeout(5);
-    newState->reader = std::move(buffer);
-  } else {
-    newState->reader = std::unique_ptr<juce::AudioFormatReader>(formatReader);
-  }
 
   // Bin index (int list)
   if (varBinX.isArray()) {
     for (auto x : *varBinX.getArray()) {
-      newState->binX.add(unsigned(int64(x)));
+      result->binX.add(unsigned(int64(x)));
     }
   }
 
   // Bin fundamental frequencies (float list)
   if (varBinF0.isArray()) {
     for (auto f0 : *varBinF0.getArray()) {
-      newState->binF0.add(f0);
+      result->binF0.add(f0);
     }
   }
 
-  // Grain index (int64le array in a base64 string)
-  juce::MemoryOutputStream memGrainX;
-  if (juce::Base64::convertFromBase64(memGrainX, varGrainX.toString())) {
-    juce::MemoryInputStream in(memGrainX.getMemoryBlock());
-    while (!in.isExhausted()) {
-      newState->grainX.add(uint64(in.readInt64()));
-    }
-  }
-
+  // Grain X table is large so it gets a separate binary file outside the JSON
   {
-    juce::ScopedWriteLock writer(stateMutex);
-    std::swap(newState, state);
-  }
+    auto stream = std::unique_ptr<juce::InputStream>(
+        result->zip->createStreamForEntry(entryGrains));
+    if (stream) {
+      juce::BufferedInputStream buffer(*stream, 64 * 1024);
+      while (!buffer.isExhausted()) {
+        result->grainX.add(uint64(buffer.readInt64()));
+      }
+    }
 
-  return GrainData::Accessor(*this).describeToString();
+    juce::FlacAudioFormat flac;
+    auto formatReader = flac.createReaderFor(
+        result->zip->createStreamForEntry(entrySound), true);
+    if (!formatReader) {
+      return "Can't read from sound file";
+    }
+
+    // Keep the buffer smallish until BufferingAudioReader is more efficient.
+    // The balance here now is that the buffer chews CPU if it has many blocks,
+    // the block size is not adjustable, and too small a buffer will cause us
+    // to read samples we don't actually have space to store when playing many
+    // overlapping grains.
+
+    const int64 bufferSize = 0; // 8 * 1024 * 1024;
+    if (bufferSize > 0) {
+      auto buffer = std::make_unique<juce::BufferingAudioReader>(
+          formatReader, loadingThread, bufferSize);
+      buffer->setReadTimeout(5);
+      result->reader = std::move(buffer);
+    } else {
+      result->reader = std::unique_ptr<juce::AudioFormatReader>(formatReader);
+    }
+
+    // Here is where the new data becomes available to other threads
+    {
+      juce::ScopedWriteLock writer(stateMutex);
+      std::swap(result, state);
+    }
+    return GrainData::Accessor(*this).describeToString();
+  }
 }
