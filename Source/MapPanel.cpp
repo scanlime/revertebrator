@@ -142,7 +142,7 @@ void MapPanel::mouseMove(const juce::MouseEvent &event) {
 }
 
 void MapImage::Request::usePreviewResolution() {
-  constexpr int maxDimension = 384;
+  constexpr int maxDimension = 120;
   int dimension = juce::jmax(bounds.getWidth(), bounds.getHeight());
   if (dimension > maxDimension) {
     bounds = (bounds.toFloat() * maxDimension / dimension).toNearestInt();
