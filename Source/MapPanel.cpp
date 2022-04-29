@@ -2,6 +2,7 @@
 #include "GrainData.h"
 #include <random>
 
+using juce::Colour;
 using juce::Image;
 using juce::Point;
 using juce::Rectangle;
@@ -55,6 +56,11 @@ private:
 
 static std::unique_ptr<juce::Image> renderImage(const MapImage::Request &req,
                                                 GrainData &grainData) {
+  constexpr double hueSpread = 18.;
+  constexpr float lightnessExponent = 2.5f;
+  constexpr float foregroundContrast = 0.7f;
+  constexpr int sampleGridSize = 4;
+
   GrainData::Accessor gda(grainData);
   auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
   if (!(width > 0 && height > 0 && gda.numSamples() && gda.numBins() &&
@@ -62,16 +68,21 @@ static std::unique_ptr<juce::Image> renderImage(const MapImage::Request &req,
     return nullptr;
   }
 
+  auto bg = req.background;
+  auto fg = bg.contrasting(foregroundContrast);
+  float bgH, bgS, bgL, fgH, fgS, fgL;
+  bg.getHSL(bgH, bgS, bgL);
+  fg.getHSL(fgH, fgS, fgL);
+
   auto image = std::make_unique<Image>(Image::RGB, width, height, false);
   auto layout = MapLayout(req.bounds.toFloat(), gda);
   Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
   std::mt19937 prng;
-  constexpr int sampleGridSize = 4;
 
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
       Point<float> pixelLoc(x, y);
-      float accum = 0.f;
+      double accum = 0.;
 
       for (int sy = 0; sy < sampleGridSize; sy++) {
         for (int sx = 0; sx < sampleGridSize; sx++) {
@@ -86,10 +97,14 @@ static std::unique_ptr<juce::Image> renderImage(const MapImage::Request &req,
               point.valid ? (point.sample / double(gda.numSamples())) : 0.f;
         }
       }
-
       accum /= juce::square<float>(sampleGridSize);
-      auto color = req.background.contrasting(accum);
-      bits.setPixelColour(x, y, color);
+
+      auto cmH = float(fmod(bgH + hueSpread * accum, 1.0));
+      auto cmS = bgS + (fgS - bgS) * float(accum);
+      auto cmL = bgL + (fgL - bgL) * powf(float(accum), lightnessExponent);
+      auto colormap = Colour::fromHSL(cmH, cmS, cmL, 1.0f);
+
+      bits.setPixelColour(x, y, colormap);
     }
   }
   return image;
