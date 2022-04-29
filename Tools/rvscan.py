@@ -99,7 +99,6 @@ def load_one(p):
     return (y, f0_v, times_v)
 
 
-tqdm.write("Collecting inputs")
 paths = []
 for srcdir in args.inputs:
     paths.extend(
@@ -116,7 +115,7 @@ grain_f0 = []
 grain_x = []
 samples = []
 offset = 0
-with tqdm(total=len(paths)) as progress:
+with tqdm(total=len(paths), unit="file", unit_scale=True) as progress:
     with multiprocessing.pool.Pool(args.parallelism) as pool:
         for (sample, f0, times) in pool.imap_unordered(load_one, paths):
             grain_f0.append(f0)
