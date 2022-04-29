@@ -162,9 +162,6 @@ def collect_audio_data(file):
     samples_per_input = {}
     marker = (pow(-1, np.arange(0, args.mark)) * 0x7FFF).astype(np.int16)
 
-    file.write(marker)
-    yy_ptr += len(marker)
-
     for grain in tqdm(ixsort, unit="grain", unit_scale=True):
         i, x = cii[grain], cgx[grain]
         if i != imemo.get("i"):
@@ -177,8 +174,8 @@ def collect_audio_data(file):
         assert grain_begin >= 0 and grain_end < len(imemo["y"])
         grain_begin = max(grain_begin, imemo["end"])
 
-        if grain_begin != imemo["end"]:
-            # Optionally mark the discontinuity
+        if grain_begin != imemo["end"] or 0 == imemo["end"]:
+            # Mark discontinuities between non-adjacent grains, and across input edges
             file.write(marker)
             yy_ptr += len(marker)
 
@@ -192,6 +189,7 @@ def collect_audio_data(file):
         samples_per_input[i] = samples_per_input.get(i, 0) + len(y)
         imemo["end"] = grain_end
 
+    # We already marked the beginning of every input file, mark the end too
     file.write(marker)
     yy_ptr += len(marker)
 
