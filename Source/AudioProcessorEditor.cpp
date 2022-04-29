@@ -12,7 +12,6 @@ AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
   addAndMakeVisible(paramPanel);
   setSize(450, 450);
   setResizable(true, true);
-  setResizeLimits(400, 200, 1600, 1600);
   thread.startThread();
 }
 
