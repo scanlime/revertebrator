@@ -15,26 +15,23 @@ import warnings
 import zipfile
 
 
-def file_scan_worker(args, filename):
-    y, sr = librosa.load(filename, sr=args.sr)
-    assert sr == args.sr
-    f0, voiced_flag, voiced_probs = librosa.pyin(
-        y, sr=args.sr, fmin=args.fmin, fmax=args.fmax, fill_na=None, resolution=args.res
+def file_scan_worker(work):
+    # the soundfile loading fallback warning on every mp3 file gets old
+    warnings.filterwarnings("ignore", module=librosa.__name__)
+
+    path, sr, fmin, fmax, res, vprob = work
+    y, _ = librosa.load(path, sr=sr)
+    f0, _, vp = librosa.pyin(
+        y, sr=sr, fmin=fmin, fmax=fmax, fill_na=None, resolution=res
     )
     times = librosa.times_like(f0)
-    voiced = voiced_probs >= args.vprob
+    voiced = vp >= vprob
     f0_v = f0[voiced]
     times_v = times[voiced]
     return (y, f0_v, times_v)
 
 
 def do_scan(args):
-    if hasattr(os, "nice"):
-        os.nice(10)
-
-    # the soundfile loading fallback warning on every mp3 file gets old
-    warnings.filterwarnings("ignore", module=librosa.__name__)
-
     paths = []
     for srcdir in args.inputs:
         paths.extend(
@@ -53,7 +50,11 @@ def do_scan(args):
     offset = 0
     with tqdm(total=len(paths), unit="file", unit_scale=True) as progress:
         with multiprocessing.pool.Pool(args.parallelism) as pool:
-            for (sample, f0, times) in pool.imap_unordered(file_scan_worker, paths):
+            work = [
+                (p, args.sr, args.fmin, args.fmax, args.res, args.vprob) for p in paths
+            ]
+            results = pool.imap_unordered(file_scan_worker, work)
+            for (sample, f0, times) in results:
                 grain_f0.append(f0)
                 grain_x.append(librosa.time_to_samples(times) + offset)
                 samples.append(sample)
@@ -406,8 +407,12 @@ def main():
     subparsers = parser.add_subparsers(required=True)
     args_for_scan(subparsers)
     args_for_pack(subparsers)
-    parser.parse_args()
+    args = parser.parse_args()
+    args.func(args)
 
 
 if __name__ == "__main__":
+    if hasattr(os, "nice"):
+        os.nice(15)
+    multiprocessing.set_start_method("spawn")
     main()
