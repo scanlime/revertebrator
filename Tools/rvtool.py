@@ -40,8 +40,6 @@ def do_scan(args):
             if not d.startswith(".")
         )
     random.shuffle(paths)
-
-    grain_filename = args.output or time.strftime(f"grains-%Y%m%d%H%M-{len(paths)}.npz")
     tqdm.write(f"Processing {len(paths)} files")
 
     grain_f0 = []
@@ -61,7 +59,8 @@ def do_scan(args):
                 offset += sample.shape[0]
                 progress.update()
 
-    tqdm.write(f"Writing output to {grain_filename}")
+    filename = args.output or time.strftime(f"grains-%Y%m%d%H%M%S-{len(paths)}.npz")
+    tqdm.write(f"Writing output to {filename}")
     grain_f0 = np.concatenate(grain_f0)
     grain_x = np.concatenate(grain_x)
     samples = np.concatenate(samples)
@@ -69,7 +68,7 @@ def do_scan(args):
     grain_f0 = grain_f0[sortkey]
     grain_x = grain_x[sortkey]
     np.savez(
-        grain_filename,
+        filename,
         y=samples,
         f0=grain_f0,
         x=grain_x,
@@ -219,7 +218,7 @@ def do_pack(args):
             "bin_f0": list(map(float, bf0)),
         }
 
-    filename = args.output or time.strftime("voice-%Y%m%d%H%M.rvv")
+    filename = args.output or time.strftime("voice-%Y%m%d%H%M%S.rvv")
     with zipfile.ZipFile(filename, "x", zipfile.ZIP_STORED) as z:
         with tempfile.TemporaryFile(dir=os.path.dirname(filename)) as tmp:
             with soundfile.SoundFile(tmp, "w", sr, 1, "PCM_16", format="flac") as sound:
@@ -267,6 +266,34 @@ def args_for_scan(subparsers):
     parser.set_defaults(func=do_scan)
 
     parser.add_argument(
+        "inputs",
+        metavar="SRC",
+        nargs="+",
+        help="directory with sound files to choose from",
+    )
+    parser.add_argument(
+        "-o",
+        metavar="DEST",
+        dest="output",
+        help="name of output file to generate [grains-###.npz]",
+    )
+
+    parser.add_argument(
+        "-n",
+        metavar="N",
+        dest="file_limit",
+        type=int,
+        help="maximum number of input files per directory",
+    )
+    parser.add_argument(
+        "-P",
+        metavar="N",
+        dest="parallelism",
+        type=int,
+        help="number of parallel jobs to run [#CPUs]",
+    )
+
+    parser.add_argument(
         "--sr",
         dest="sr",
         metavar="HZ",
@@ -307,33 +334,6 @@ def args_for_scan(subparsers):
         help=f"pitch detection resolution in semitones [{default_res}]",
     )
 
-    parser.add_argument(
-        "inputs",
-        metavar="SRC",
-        nargs="+",
-        help="directory with sound files to choose from",
-    )
-    parser.add_argument(
-        "-o",
-        metavar="DEST",
-        dest="output",
-        help="name of output file to generate [grains-###.npz]",
-    )
-    parser.add_argument(
-        "-P",
-        metavar="N",
-        dest="parallelism",
-        type=int,
-        help="number of parallel jobs to run [#CPUs]",
-    )
-    parser.add_argument(
-        "-n",
-        metavar="N",
-        dest="file_limit",
-        type=int,
-        help="maximum number of input files per directory",
-    )
-
 
 def args_for_pack(subparsers):
     default_res = 0.01
@@ -346,6 +346,35 @@ def args_for_pack(subparsers):
         description="Build a compressed grain database from multiple uncompressed inputs",
     )
     parser.set_defaults(func=do_pack)
+
+    parser.add_argument(
+        "inputs",
+        metavar="SRC",
+        nargs="+",
+        help="one or more npz files produced by the scan command",
+    )
+    parser.add_argument(
+        "-o",
+        metavar="DEST",
+        dest="output",
+        help="name of packed output file [voice-###.rvv]",
+    )
+
+    parser.add_argument(
+        "-w",
+        metavar="S",
+        dest="width",
+        type=float,
+        default=default_width,
+        help=f"maximum grain width in seconds [{default_width}]",
+    )
+    parser.add_argument(
+        "-n",
+        metavar="N",
+        dest="max",
+        type=int,
+        help="maximum number of grains per bin [no limit]",
+    )
 
     parser.add_argument(
         "--res",
@@ -371,33 +400,6 @@ def args_for_pack(subparsers):
         default=default_mark,
         help=f"mark discontinuities with an N sample long noise [{default_mark}]",
     )
-    parser.add_argument(
-        "inputs",
-        metavar="SRC",
-        nargs="+",
-        help="one or more npz files produced by the scan command",
-    )
-    parser.add_argument(
-        "-w",
-        metavar="S",
-        dest="width",
-        type=float,
-        default=default_width,
-        help=f"maximum grain width in seconds [{default_width}]",
-    )
-    parser.add_argument(
-        "-n",
-        metavar="N",
-        dest="max",
-        type=int,
-        help="maximum number of grains per bin [no limit]",
-    )
-    parser.add_argument(
-        "-o",
-        metavar="DEST",
-        dest="output",
-        help="name of packed output file [voice-###.rvv]",
-    )
 
 
 def main():
@@ -413,4 +415,3 @@ if __name__ == "__main__":
     if hasattr(os, "nice"):
         os.nice(5)
     main()
-
