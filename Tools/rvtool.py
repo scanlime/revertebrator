@@ -59,8 +59,13 @@ def do_scan(args):
                 offset += sample.shape[0]
                 progress.update()
 
-    filename = args.output or time.strftime(f"grains-%Y%m%d%H%M%S-{len(paths)}.npz")
+    filename = args.output or time.strftime(f"grains-%Y%m%d%H%M%S-{len(paths)}")
+    if os.path.splitext(filename)[1] != ".npz":
+        filename += ".npz"
     tqdm.write(f"Writing output to {filename}")
+    if os.path.lexists(filename):
+        raise IOError(f"Will not overwrite existing file at '{filename}'")
+
     grain_f0 = np.concatenate(grain_f0)
     grain_x = np.concatenate(grain_x)
     samples = np.concatenate(samples)
@@ -218,7 +223,12 @@ def do_pack(args):
             "bin_f0": list(map(float, bf0)),
         }
 
-    filename = args.output or time.strftime("voice-%Y%m%d%H%M%S.rvv")
+    filename = args.output or time.strftime("voice-%Y%m%d%H%M%S")
+    if os.path.splitext(filename)[1] != ".rvv":
+        filename += ".rvv"
+    if os.path.lexists(filename):
+        raise IOError(f"Will not overwrite existing file at '{filename}'")
+
     with zipfile.ZipFile(filename, "x", zipfile.ZIP_STORED) as z:
         with tempfile.TemporaryFile(dir=os.path.dirname(filename)) as tmp:
             with soundfile.SoundFile(tmp, "w", sr, 1, "PCM_16", format="flac") as sound:
