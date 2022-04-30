@@ -61,15 +61,13 @@ def do_scan(args):
                 offset += sample.shape[0]
                 progress.update()
 
-    tqdm.write("Collecting results")
+    tqdm.write(f"Writing output to {grain_filename}")
     grain_f0 = np.concatenate(grain_f0)
     grain_x = np.concatenate(grain_x)
     samples = np.concatenate(samples)
     sortkey = np.lexsort((grain_x, grain_f0))
     grain_f0 = grain_f0[sortkey]
     grain_x = grain_x[sortkey]
-
-    tqdm.write(f"Writing output to {grain_filename}")
     np.savez(
         grain_filename,
         y=samples,
@@ -413,6 +411,6 @@ def main():
 
 if __name__ == "__main__":
     if hasattr(os, "nice"):
-        os.nice(15)
-    multiprocessing.set_start_method("spawn")
+        os.nice(5)
     main()
+
