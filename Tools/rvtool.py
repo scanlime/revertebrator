@@ -21,14 +21,12 @@ def file_scan_worker(work):
 
     path, sr, fmin, fmax, res, vprob = work
     y, _ = librosa.load(path, sr=sr)
-    f0, _, vp = librosa.pyin(
+    f0, _, v = librosa.pyin(
         y, sr=sr, fmin=fmin, fmax=fmax, fill_na=None, resolution=res
     )
     times = librosa.times_like(f0)
-    voiced = vp >= vprob
-    f0_v = f0[voiced]
-    times_v = times[voiced]
-    return (y, f0_v, times_v)
+    i = v >= vprob
+    return (y, f0[i], times[i])
 
 
 def do_scan(args):
