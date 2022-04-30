@@ -82,6 +82,9 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+if hasattr(os, "nice"):
+    os.nice(10)
+
 # the soundfile loading fallback warning on every mp3 file gets old
 warnings.filterwarnings("ignore", module=librosa.__name__)
 
