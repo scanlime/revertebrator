@@ -1,0 +1,4 @@
+*.pyc
+*.npz
+*.rvv
+venv/
