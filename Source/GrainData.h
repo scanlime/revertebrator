@@ -2,6 +2,21 @@
 
 #include <JuceHeader.h>
 
+struct GrainWindow {
+  GrainWindow(float maxWidthSamples, float mix, float width0, float width1,
+              float phase1);
+  float mix;
+  int width0, width1, phase1;
+};
+
+class GrainWaveId {
+  unsigned grain;
+  float speedRatio;
+  GrainWindow window;
+};
+
+class GrainWaveData {};
+
 class GrainData : private juce::Value::Listener, private juce::TimeSliceClient {
 public:
   GrainData();
@@ -89,6 +104,12 @@ private:
   juce::String load(const juce::File &);
 
   struct State {
+    // what does this rwlock really represent? only changes of the entire state
+    // during a reload? if we are dealing with asynchronous loading of graindata
+    // constantly this is of limited use, i don't want to writelock every time a
+    // grain is loaded. seems like we can replace this whole thing with a queue
+    // pair and a thread pool.
+
     std::unique_ptr<juce::ZipFile> zip;
     std::unique_ptr<juce::AudioFormatReader> reader;
     juce::uint64 soundLen;
