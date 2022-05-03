@@ -24,8 +24,7 @@ AudioProcessor::AudioProcessor()
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
              std::make_unique<juce::AudioParameterFloat>(
                  "pitch_spread", "Pitch Spread",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
-      generalPurposeThreads(2), outputSampleRate(48000.) {
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}) {
   state.state.addChild({"grain_data", {{"src", ""}}, {}}, -1, nullptr);
   state.state.addChild({"ui_state",
                         {

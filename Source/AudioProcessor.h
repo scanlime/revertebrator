@@ -35,15 +35,15 @@ public:
   void setStateInformation(const void *data, int sizeInBytes) override;
 
   juce::AudioProcessorValueTreeState state;
-  juce::ThreadPool generalPurposeThreads;
+  juce::ThreadPool generalPurposeThreads{2};
   GrainData grainData;
 
-  juce::int64 temp_ptr, temp_ptr_prev, temp_playback;
+  juce::int64 temp_ptr{0}, temp_ptr_prev{0}, temp_playback{0};
 
 private:
   void attachState();
 
-  double outputSampleRate;
+  double outputSampleRate{48000};
   juce::OwnedArray<juce::WindowedSincInterpolator> outputResampler;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
