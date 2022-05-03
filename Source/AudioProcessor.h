@@ -35,6 +35,7 @@ public:
   void setStateInformation(const void *data, int sizeInBytes) override;
 
   juce::AudioProcessorValueTreeState state;
+  juce::ThreadPool generalPurposeThreads;
   GrainData grainData;
 
   juce::int64 temp_ptr, temp_ptr_prev, temp_playback;

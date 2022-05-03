@@ -3,42 +3,11 @@
 #include "AudioProcessor.h"
 #include <JuceHeader.h>
 
-class MapImage : private juce::TimeSliceClient, public juce::ChangeBroadcaster {
-public:
-  MapImage(GrainData &, juce::TimeSliceThread &);
-  ~MapImage() override;
-
-  struct Request {
-    juce::Rectangle<int> bounds;
-    juce::Colour background;
-
-    void usePreviewResolution();
-    bool operator==(const Request &r) {
-      return bounds == r.bounds && background == r.background;
-    }
-  };
-
-  void requestChange(const Request &req);
-  void drawLatestImage(juce::Graphics &g, juce::Rectangle<float> location);
-  void discardStoredImage();
-
-private:
-  int useTimeSlice() override;
-
-  GrainData &grainData;
-  juce::TimeSliceThread &thread;
-  juce::CriticalSection mutex;
-  std::unique_ptr<juce::Image> image;
-  Request lastRequest, nextRequest;
-
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MapImage)
-};
-
 class MapPanel : public juce::Component,
                  private juce::Value::Listener,
                  private juce::ChangeListener {
 public:
-  MapPanel(AudioProcessor &, juce::TimeSliceThread &);
+  MapPanel(AudioProcessor &);
   ~MapPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -46,9 +15,12 @@ public:
   void mouseMove(const juce::MouseEvent &) override;
 
 private:
+  class Layout;
+  class ImageRender;
+
   AudioProcessor &audioProcessor;
+  std::unique_ptr<ImageRender> image;
   juce::Value grainDataStatus;
-  MapImage mapImage;
 
   void requestNewImage();
   void valueChanged(juce::Value &) override;

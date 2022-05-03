@@ -15,7 +15,6 @@ public:
   void resized() override;
 
 private:
-  juce::TimeSliceThread thread;
   DataPanel dataPanel;
   MapPanel mapPanel;
   WindowPanel windowPanel;

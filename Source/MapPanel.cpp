@@ -8,9 +8,9 @@ using juce::Point;
 using juce::Rectangle;
 using juce::uint64;
 
-class MapLayout {
+class MapPanel::Layout {
 public:
-  MapLayout(const Rectangle<float> &bounds, const GrainData::Accessor &gda)
+  Layout(const Rectangle<float> &bounds, const GrainData::Accessor &gda)
       : bounds(bounds), gda(gda) {
     pitchRange = gda.pitchRange();
     if (pitchRange.isEmpty()) {
@@ -52,77 +52,165 @@ private:
   const GrainData::Accessor &gda;
   juce::Range<float> pitchRange;
   float logPitchRatio;
+
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Layout)
 };
 
-static std::unique_ptr<juce::Image> renderImage(const MapImage::Request &req,
-                                                GrainData &grainData) {
-  constexpr double hueSpread = 18.;
-  constexpr float lightnessExponent = 2.5f;
-  constexpr float foregroundContrast = 0.7f;
-  constexpr int sampleGridSize = 4;
+class MapPanel::ImageRender : private juce::ThreadPoolJob,
+                              public juce::ChangeBroadcaster {
+public:
+  ImageRender(AudioProcessor &audioProcessor)
+      : ThreadPoolJob("map_image_render"), audioProcessor(audioProcessor) {}
 
-  GrainData::Accessor gda(grainData);
-  auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
-  if (!(width > 0 && height > 0 && gda.numSamples() && gda.numBins() &&
-        gda.numGrains())) {
-    return nullptr;
+  ~ImageRender() override {
+    audioProcessor.generalPurposeThreads.waitForJobToFinish(this, -1);
   }
 
-  auto bg = req.background;
-  auto fg = bg.contrasting(foregroundContrast);
-  float bgH, bgS, bgL, fgH, fgS, fgL;
-  bg.getHSL(bgH, bgS, bgL);
-  fg.getHSL(fgH, fgS, fgL);
+  struct Request {
+    juce::Rectangle<int> bounds;
+    juce::Colour background;
 
-  auto image = std::make_unique<Image>(Image::RGB, width, height, false);
-  auto layout = MapLayout(req.bounds.toFloat(), gda);
-  Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
-  std::mt19937 prng;
-
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      Point<float> pixelLoc(x, y);
-      double accum = 0.;
-
-      for (int sy = 0; sy < sampleGridSize; sy++) {
-        for (int sx = 0; sx < sampleGridSize; sx++) {
-          auto jitter = prng();
-          float jx = float(jitter & 0xffff) / 0xffff;
-          jitter >>= 16;
-          float jy = float(jitter & 0xffff) / 0xffff;
-          auto sampleLoc =
-              pixelLoc + Point<float>(sx + jx, sy + jy) / sampleGridSize;
-          auto point = layout.pointInfo(sampleLoc);
-          accum +=
-              point.valid ? (point.sample / double(gda.numSamples())) : 0.f;
-        }
+    void usePreviewResolution() {
+      constexpr int maxDimension = 120;
+      int dimension = juce::jmax(bounds.getWidth(), bounds.getHeight());
+      if (dimension > maxDimension) {
+        bounds = (bounds.toFloat() * maxDimension / dimension).toNearestInt();
       }
-      accum /= juce::square<float>(sampleGridSize);
+    }
 
-      auto cmH = float(fmod(bgH + hueSpread * accum, 1.0));
-      auto cmS = bgS + (fgS - bgS) * float(accum);
-      auto cmL = bgL + (fgL - bgL) * powf(float(accum), lightnessExponent);
-      auto colormap = Colour::fromHSL(cmH, cmS, cmL, 1.0f);
+    bool operator==(const Request &r) {
+      return bounds == r.bounds && background == r.background;
+    }
+  };
 
-      bits.setPixelColour(x, y, colormap);
+  void requestChange(const Request &req) {
+    bool shouldAddJob;
+    {
+      std::lock_guard<std::mutex> guard(lock);
+      nextRequest = req;
+      shouldAddJob = !isPending;
+      isPending = true;
+    }
+    if (shouldAddJob) {
+      audioProcessor.generalPurposeThreads.addJob(this, false);
     }
   }
-  return image;
-}
 
-MapPanel::MapPanel(AudioProcessor &audioProcessor,
-                   juce::TimeSliceThread &thread)
+  void discardStored() {
+    std::lock_guard<std::mutex> guard(lock);
+    lastRequest = Request{};
+    image = nullptr;
+  }
+
+  void drawLatest(juce::Graphics &g, juce::Rectangle<float> location) {
+    std::lock_guard<std::mutex> guard(lock);
+    if (image) {
+      g.drawImage(*image, location);
+    }
+  }
+
+private:
+  AudioProcessor &audioProcessor;
+  std::mutex lock;
+  std::unique_ptr<Image> image;
+  Request lastRequest, nextRequest;
+  bool isPending{false};
+
+  JobStatus runJob() override {
+    Request req;
+    {
+      std::lock_guard<std::mutex> guard(lock);
+      req = nextRequest;
+      if (image && lastRequest == req) {
+        isPending = false;
+        return JobStatus::jobHasFinished;
+      }
+      if (!image) {
+        req.usePreviewResolution();
+      }
+    }
+    auto newImage = renderImage(req, audioProcessor.grainData);
+    {
+      std::lock_guard<std::mutex> guard(lock);
+      lastRequest = req;
+      std::swap(newImage, image);
+    }
+    sendChangeMessage();
+    // Re-check for requests that may have arrived during render
+    return JobStatus::jobNeedsRunningAgain;
+  }
+
+  static std::unique_ptr<Image> renderImage(const Request &req,
+                                            GrainData &grainData) {
+    constexpr double hueSpread = 18.;
+    constexpr float lightnessExponent = 2.5f;
+    constexpr float foregroundContrast = 0.7f;
+    constexpr int sampleGridSize = 4;
+
+    GrainData::Accessor gda(grainData);
+    auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
+    if (!(width > 0 && height > 0 && gda.numSamples() && gda.numBins() &&
+          gda.numGrains())) {
+      return nullptr;
+    }
+
+    auto bg = req.background;
+    auto fg = bg.contrasting(foregroundContrast);
+    float bgH, bgS, bgL, fgH, fgS, fgL;
+    bg.getHSL(bgH, bgS, bgL);
+    fg.getHSL(fgH, fgS, fgL);
+
+    auto image = std::make_unique<Image>(Image::RGB, width, height, false);
+    Layout layout(req.bounds.toFloat(), gda);
+    Image::BitmapData bits(*image, Image::BitmapData::writeOnly);
+    std::mt19937 prng;
+
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        Point<float> pixelLoc(x, y);
+        double accum = 0.;
+
+        for (int sy = 0; sy < sampleGridSize; sy++) {
+          for (int sx = 0; sx < sampleGridSize; sx++) {
+            auto jitter = prng();
+            float jx = float(jitter & 0xffff) / 0xffff;
+            jitter >>= 16;
+            float jy = float(jitter & 0xffff) / 0xffff;
+            auto sampleLoc =
+                pixelLoc + Point<float>(sx + jx, sy + jy) / sampleGridSize;
+            auto point = layout.pointInfo(sampleLoc);
+            accum +=
+                point.valid ? (point.sample / double(gda.numSamples())) : 0.f;
+          }
+        }
+        accum /= juce::square<float>(sampleGridSize);
+
+        auto cmH = float(fmod(bgH + hueSpread * accum, 1.0));
+        auto cmS = bgS + (fgS - bgS) * float(accum);
+        auto cmL = bgL + (fgL - bgL) * powf(float(accum), lightnessExponent);
+        auto colormap = Colour::fromHSL(cmH, cmS, cmL, 1.0f);
+
+        bits.setPixelColour(x, y, colormap);
+      }
+    }
+    return image;
+  }
+
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImageRender)
+};
+
+MapPanel::MapPanel(AudioProcessor &audioProcessor)
     : audioProcessor(audioProcessor),
-      mapImage(audioProcessor.grainData, thread) {
+      image(std::make_unique<ImageRender>(audioProcessor)) {
   audioProcessor.grainData.referToStatusOutput(grainDataStatus);
   grainDataStatus.addListener(this);
-  mapImage.addChangeListener(this);
+  image->addChangeListener(this);
 }
 
-MapPanel::~MapPanel() { mapImage.removeChangeListener(this); }
+MapPanel::~MapPanel() { image->removeChangeListener(this); }
 
 void MapPanel::paint(juce::Graphics &g) {
-  mapImage.drawLatestImage(g, getLocalBounds().toFloat());
+  image->drawLatest(g, getLocalBounds().toFloat());
 }
 
 void MapPanel::resized() {
@@ -132,86 +220,29 @@ void MapPanel::resized() {
 
 void MapPanel::valueChanged(juce::Value &) {
   // Immediately discard image when the data source is changed
-  mapImage.discardStoredImage();
+  image->discardStored();
   requestNewImage();
 }
 
 void MapPanel::requestNewImage() {
-  mapImage.requestChange(MapImage::Request{
+  image->requestChange(ImageRender::Request{
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
   });
 }
 
-void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) { repaint(); }
+void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
+  const juce::MessageManagerLock mmlock;
+  repaint();
+}
 
 void MapPanel::mouseMove(const juce::MouseEvent &event) {
   GrainData::Accessor gda(audioProcessor.grainData);
-  auto layout = MapLayout(getLocalBounds().toFloat(), gda);
+  Layout layout(getLocalBounds().toFloat(), gda);
   auto point = layout.pointInfo(event.getPosition().toFloat());
   if (point.valid) {
     printf("grain %d bin %d, %f Hz\n", point.grain, point.bin,
            gda.pitchForBin(point.bin));
     audioProcessor.temp_ptr = point.sample;
   }
-}
-
-void MapImage::Request::usePreviewResolution() {
-  constexpr int maxDimension = 120;
-  int dimension = juce::jmax(bounds.getWidth(), bounds.getHeight());
-  if (dimension > maxDimension) {
-    bounds = (bounds.toFloat() * maxDimension / dimension).toNearestInt();
-  }
-}
-
-MapImage::MapImage(GrainData &grainData, juce::TimeSliceThread &thread)
-    : thread(thread), grainData(grainData) {}
-
-MapImage::~MapImage() { thread.removeTimeSliceClient(this); }
-
-void MapImage::requestChange(const Request &req) {
-  juce::ScopedLock sl(mutex);
-  nextRequest = req;
-  thread.addTimeSliceClient(this);
-}
-
-void MapImage::discardStoredImage() {
-  juce::ScopedLock sl(mutex);
-  lastRequest = Request{};
-  image = nullptr;
-}
-
-void MapImage::drawLatestImage(juce::Graphics &g,
-                               juce::Rectangle<float> location) {
-  juce::ScopedLock sl(mutex);
-  if (image) {
-    g.drawImage(*image, location);
-  }
-}
-
-int MapImage::useTimeSlice() {
-  Request req;
-  {
-    juce::ScopedLock sl(mutex);
-    req = nextRequest;
-    if (image && lastRequest == req) {
-      // Idle
-      return -1;
-    }
-    if (!image) {
-      req.usePreviewResolution();
-    }
-  }
-  auto newImage = renderImage(req, grainData);
-  {
-    juce::ScopedLock sl(mutex);
-    lastRequest = req;
-    std::swap(newImage, image);
-  }
-  {
-    const juce::MessageManagerLock mmlock;
-    sendChangeMessage();
-  }
-  // Re-check for requests that may have arrived during render
-  return 0;
 }
