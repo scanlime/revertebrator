@@ -34,7 +34,6 @@ AudioProcessor::AudioProcessor()
                         {}},
                        -1, nullptr);
   attachState();
-  temp_ptr = 0;
 }
 
 AudioProcessor::~AudioProcessor() {}
