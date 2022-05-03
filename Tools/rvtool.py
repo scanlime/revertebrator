@@ -31,14 +31,18 @@ def file_scan_worker(work):
 
 def do_scan(args):
     paths = []
-    for srcdir in args.inputs:
-        paths.extend(
-            os.path.join(srcdir, d)
-            for d in os.listdir(srcdir)[: args.file_limit]
-            if not d.startswith(".")
-        )
+    for src in args.inputs:
+        if os.path.isdir(src):
+            paths.extend(
+                os.path.join(src, d)
+                for d in os.listdir(src)[: args.file_limit]
+                if not d.startswith(".")
+            )
+        else:
+            paths.append(src)
     random.shuffle(paths)
-    tqdm.write(f"Processing {len(paths)} files")
+    if len(paths) > 1:
+        tqdm.write(f"Processing {len(paths)} files")
 
     grain_f0 = []
     grain_x = []
@@ -277,7 +281,7 @@ def args_for_scan(subparsers):
         "inputs",
         metavar="SRC",
         nargs="+",
-        help="directory with sound files to choose from",
+        help="sound file or directory with sound files to choose from",
     )
     parser.add_argument(
         "-o",
