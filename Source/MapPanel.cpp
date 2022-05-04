@@ -10,14 +10,13 @@ using juce::uint64;
 
 class MapPanel::Layout {
 public:
-  Layout(const Rectangle<float> &bounds, const GrainData::Accessor &gda)
-      : bounds(bounds), gda(gda) {
-    pitchRange = gda.pitchRange();
+  Layout(const Rectangle<float> &bounds, const GrainIndex &index)
+      : bounds(bounds), index(index) {
+    pitchRange = index.pitchRange();
     if (pitchRange.isEmpty()) {
       logPitchRatio = 0.f;
     } else {
-      float pitchRatio = pitchRange.getEnd() / pitchRange.getStart();
-      logPitchRatio = log(pitchRatio);
+      logPitchRatio = log(pitchRange.getEnd() / pitchRange.getStart());
     }
   }
 
@@ -27,20 +26,20 @@ public:
     uint64 sample;
   };
 
-  forcedinline PointInfo pointInfo(const Point<float> &p) {
+  inline PointInfo pointInfo(const Point<float> &p) {
     if (bounds.contains(p)) {
       auto result = PointInfo{.valid = true};
 
       // X axis: logarithmic pitch
       float relX = (p.x - bounds.getX()) / (bounds.getWidth() - 1);
-      result.bin = gda.closestBinForPitch(pitchRange.getStart() *
-                                          exp(relX * logPitchRatio));
+      result.bin = index.closestBinForPitch(pitchRange.getStart() *
+                                            exp(relX * logPitchRatio));
 
       // Y axis: linear grain selector, variable resolution
-      auto gr = gda.grainsForBin(result.bin);
+      auto gr = index.grainsForBin(result.bin);
       float relY = (p.y - bounds.getY()) / bounds.getHeight();
       result.grain = gr.clipValue(gr.getStart() + gr.getLength() * relY);
-      result.sample = gda.centerSampleForGrain(result.grain);
+      result.sample = index.grainX[result.grain];
       return result;
     } else {
       return PointInfo{false};
@@ -49,7 +48,7 @@ public:
 
 private:
   Rectangle<float> bounds;
-  const GrainData::Accessor &gda;
+  const GrainIndex &index;
   juce::Range<float> pitchRange;
   float logPitchRatio;
 
@@ -129,7 +128,8 @@ private:
         req.usePreviewResolution();
       }
     }
-    auto newImage = renderImage(req, audioProcessor.grainData);
+    auto index = audioProcessor.grainData.getIndex();
+    auto newImage = index ? renderImage(req, *index) : nullptr;
     {
       std::lock_guard<std::mutex> guard(lock);
       lastRequest = req;
@@ -141,16 +141,15 @@ private:
   }
 
   static std::unique_ptr<Image> renderImage(const Request &req,
-                                            GrainData &grainData) {
+                                            const GrainIndex &index) {
     constexpr double hueSpread = 18.;
     constexpr float lightnessExponent = 2.5f;
     constexpr float foregroundContrast = 0.7f;
     constexpr int sampleGridSize = 4;
 
-    GrainData::Accessor gda(grainData);
     auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
-    if (!(width > 0 && height > 0 && gda.numSamples() && gda.numBins() &&
-          gda.numGrains())) {
+    if (!(width > 0 && height > 0 && index.numSamples > 0 &&
+          index.numBins > 0 && index.numGrains > 0)) {
       return nullptr;
     }
 
@@ -161,7 +160,7 @@ private:
     fg.getHSL(fgH, fgS, fgL);
 
     auto image = std::make_unique<Image>(Image::RGB, width, height, false);
-    Layout layout(req.bounds.toFloat(), gda);
+    Layout layout(req.bounds.toFloat(), index);
     Image::BitmapData bits(*image, Image::BitmapData::writeOnly);
     std::mt19937 prng;
 
@@ -180,7 +179,7 @@ private:
                 pixelLoc + Point<float>(sx + jx, sy + jy) / sampleGridSize;
             auto point = layout.pointInfo(sampleLoc);
             accum +=
-                point.valid ? (point.sample / double(gda.numSamples())) : 0.f;
+                point.valid ? (point.sample / double(index.numSamples)) : 0.f;
           }
         }
         accum /= juce::square<float>(sampleGridSize);
@@ -237,12 +236,13 @@ void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
 }
 
 void MapPanel::mouseMove(const juce::MouseEvent &event) {
-  GrainData::Accessor gda(audioProcessor.grainData);
-  Layout layout(getLocalBounds().toFloat(), gda);
-  auto point = layout.pointInfo(event.getPosition().toFloat());
-  if (point.valid) {
-    printf("grain %d bin %d, %f Hz\n", point.grain, point.bin,
-           gda.pitchForBin(point.bin));
-    audioProcessor.temp_ptr = point.sample;
+  GrainIndex::Ptr index = audioProcessor.grainData.getIndex();
+  if (index) {
+    Layout layout(getLocalBounds().toFloat(), *index);
+    auto point = layout.pointInfo(event.getPosition().toFloat());
+    if (point.valid) {
+      printf("grain %d bin %d, %f Hz\n", point.grain, point.bin,
+             index->binF0[point.bin]);
+    }
   }
 }

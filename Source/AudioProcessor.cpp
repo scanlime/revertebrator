@@ -24,7 +24,8 @@ AudioProcessor::AudioProcessor()
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
              std::make_unique<juce::AudioParameterFloat>(
                  "pitch_spread", "Pitch Spread",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}) {
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
+      grainData(generalPurposeThreads) {
   state.state.addChild({"grain_data", {{"src", ""}}, {}}, -1, nullptr);
   state.state.addChild({"ui_state",
                         {
@@ -52,11 +53,10 @@ const String AudioProcessor::getProgramName(int index) { return {}; }
 void AudioProcessor::changeProgramName(int index, const String &newName) {}
 
 void AudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-  grainData.startThread();
   outputSampleRate = sampleRate;
 }
 
-void AudioProcessor::releaseResources() { grainData.stopThread(250); }
+void AudioProcessor::releaseResources() {}
 
 bool AudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const {
   if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
@@ -68,33 +68,7 @@ bool AudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const {
 void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                   juce::MidiBuffer &midiMessages) {
   juce::ScopedNoDenormals noDenormals;
-  auto totalNumOutputChannels = getTotalNumOutputChannels();
-  GrainData::Accessor gda(grainData);
-
-  double speedRatio = gda.sampleRate() / outputSampleRate;
-  juce::AudioBuffer<float> tmp(buffer.getNumChannels(), buffer.getNumSamples());
-
-  while (tmp.getNumChannels() > outputResampler.size()) {
-    outputResampler.add(new juce::WindowedSincInterpolator());
-  }
-
-  if (temp_ptr_prev != temp_ptr) {
-    temp_playback = temp_ptr_prev = temp_ptr;
-  }
-
-  if (gda.read(tmp.getArrayOfWritePointers(), tmp.getNumChannels(),
-               temp_playback, tmp.getNumSamples())) {
-
-    int actualSamples = 0;
-    for (int ch = 0; ch < tmp.getNumChannels(); ch++) {
-      actualSamples = outputResampler[ch]->process(
-          speedRatio, tmp.getReadPointer(0 /*ch*/), buffer.getWritePointer(ch),
-          buffer.getNumSamples());
-    }
-    temp_playback += actualSamples;
-  } else {
-    buffer.clear(0, buffer.getNumSamples());
-  }
+  buffer.clear(0, buffer.getNumSamples());
 }
 
 juce::AudioProcessorEditor *AudioProcessor::createEditor() {
