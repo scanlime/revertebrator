@@ -3,6 +3,37 @@
 #include <JuceHeader.h>
 #include <mutex>
 
+struct GrainWindow {
+  float mix;
+  int width0, width1, phase1;
+
+  GrainWindow(float maxGrainWidthSamples, float mix, float w0, float w1,
+              float p1);
+  bool operator==(const GrainWindow &) noexcept;
+};
+
+class GrainWaveform : public juce::ReferenceCountedObject {
+public:
+  using Ptr = juce::ReferenceCountedObjectPtr<GrainWaveform>;
+
+  struct Key {
+    unsigned grain;
+    float speedRatio;
+    GrainWindow window;
+
+    bool operator==(const Key &) noexcept;
+  };
+
+  GrainWaveform(const Key &, juce::uint64 grainX, juce::AudioFormatReader &);
+  ~GrainWaveform() override;
+
+  Key key;
+  juce::AudioBuffer<float> buffer;
+
+private:
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainWaveform)
+};
+
 class GrainIndex : public juce::ReferenceCountedObject {
 public:
   using Ptr = juce::ReferenceCountedObjectPtr<GrainIndex>;
@@ -39,43 +70,23 @@ public:
     return juce::Range<unsigned>(binX[bin], binX[bin + 1]);
   }
 
+  GrainWaveform::Ptr getWaveform(const GrainWaveform::Key &);
+
   juce::String describeToString() const;
   static juce::String numSamplesToString(juce::uint64 numSamples);
 
 private:
-  juce::Result load();
-
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainIndex)
-};
-
-struct GrainWindow {
-  float mix;
-  int width0, width1, phase1;
-
-  GrainWindow(const GrainIndex &, float mix, float w0, float w1, float p1);
-  bool operator==(const GrainWindow &) noexcept;
-};
-
-class GrainWaveform : public juce::ReferenceCountedObject {
-public:
-  using Ptr = juce::ReferenceCountedObjectPtr<GrainWaveform>;
-
-  struct Key {
-    unsigned grain;
-    float speedRatio;
-    GrainWindow window;
-
-    bool operator==(const Key &) noexcept;
+  struct Hasher {
+    int generateHash(const GrainWindow &, int) noexcept;
+    int generateHash(const GrainWaveform::Key &, int) noexcept;
   };
 
-  GrainWaveform(const GrainIndex &, const Key &, juce::AudioFormatReader &);
-  ~GrainWaveform() override;
+  std::mutex cacheMutex;
+  juce::HashMap<GrainWaveform::Key, GrainWaveform::Ptr, Hasher> cache;
 
-  Key key;
-  juce::AudioBuffer<float> buffer;
+  juce::Result loadIndex();
 
-private:
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainWaveform)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainIndex)
 };
 
 class GrainData {
@@ -87,24 +98,13 @@ public:
   void referToStatusOutput(juce::Value &);
 
   GrainIndex::Ptr getIndex();
-  GrainWaveform::Ptr getWaveform(const GrainWaveform::Key &);
 
 private:
-  struct Hasher {
-    int generateHash(const GrainWindow &, int) noexcept;
-    int generateHash(const GrainWaveform::Key &, int) noexcept;
-  };
-
   class IndexLoaderJob;
   class WaveformLoaderThread;
-  using Key = GrainWaveform::Key;
-  using Cache = juce::HashMap<Key, GrainWaveform::Ptr, Hasher>;
 
   juce::OwnedArray<WaveformLoaderThread> waveformLoaderThreads;
   std::unique_ptr<IndexLoaderJob> indexLoaderJob;
-
-  std::mutex cacheMutex;
-  Cache cache;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainData)
 };

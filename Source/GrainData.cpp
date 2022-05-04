@@ -2,7 +2,10 @@
 
 class Zip64Reader {
 public:
-  Zip64Reader(const juce::File &file) : stream(file) {}
+  Zip64Reader(const juce::File &file) : stream(file) {
+    printf("%lld\n", file.getSize());
+  }
+
   virtual ~Zip64Reader() {}
 
 private:
@@ -11,10 +14,11 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Zip64Reader)
 };
 
-GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
+GrainIndex::GrainIndex(const juce::File &file)
+    : file(file), status(loadIndex()) {}
 GrainIndex::~GrainIndex() {}
 
-juce::Result GrainIndex::load() {
+juce::Result GrainIndex::loadIndex() {
   if (!file.existsAsFile()) {
     return juce::Result::fail("No grain data file");
   }
@@ -109,6 +113,10 @@ juce::String GrainIndex::numSamplesToString(juce::uint64 samples) {
          unit->prefix + "samples";
 }
 
+GrainWaveform::Ptr GrainIndex::getWaveform(const GrainWaveform::Key &) {
+  return nullptr;
+}
+
 class GrainData::IndexLoaderJob : private juce::ThreadPoolJob,
                                   private juce::Value::Listener {
 public:
@@ -201,21 +209,19 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformLoaderThread)
 };
 
-GrainWindow::GrainWindow(const GrainIndex &index, float mix, float w0, float w1,
-                         float p1)
+GrainWindow::GrainWindow(float maxGrainWidthSamples, float mix, float w0,
+                         float w1, float p1)
     : mix(juce::jlimit(0.f, 1.f, mix)),
       width0(1 + std::round(juce::jlimit(0.f, 1.f, w0) *
-                            (index.maxGrainWidthSamples() - 1.f))),
-      width1(width0 +
-             std::round(juce::jlimit(0.f, 1.f, w0) *
-                        (index.maxGrainWidthSamples() - float(width0)))),
+                            (maxGrainWidthSamples - 1.f))),
+      width1(width0 + std::round(juce::jlimit(0.f, 1.f, w0) *
+                                 (maxGrainWidthSamples - float(width0)))),
       phase1(std::round(juce::jlimit(-1.f, 1.f, p1) *
-                        (index.maxGrainWidthSamples() - float(width1)))) {
+                        (maxGrainWidthSamples - float(width1)))) {
   jassert(mix >= 0.f && mix <= 1.f);
-  jassert(width0 >= 1 && width0 <= std::ceil(index.maxGrainWidthSamples()));
-  jassert(width1 >= width0 &&
-          width1 <= std::ceil(index.maxGrainWidthSamples()));
-  jassert(std::abs(phase1) <= std::ceil(index.maxGrainWidthSamples()));
+  jassert(width0 >= 1 && width0 <= std::ceil(maxGrainWidthSamples));
+  jassert(width1 >= width0 && width1 <= std::ceil(maxGrainWidthSamples));
+  jassert(std::abs(phase1) <= std::ceil(maxGrainWidthSamples));
 }
 
 bool GrainWindow::operator==(const GrainWindow &o) noexcept {
@@ -227,21 +233,21 @@ bool GrainWaveform::Key::operator==(const Key &o) noexcept {
   return grain == o.grain && speedRatio == o.speedRatio && window == o.window;
 }
 
-GrainWaveform::GrainWaveform(const GrainIndex &grainIndex, const Key &key,
+GrainWaveform::GrainWaveform(const Key &key, juce::uint64 grainX,
                              juce::AudioFormatReader &reader)
     : key(key) {}
 
 GrainWaveform::~GrainWaveform() {}
 
-int GrainData::Hasher::generateHash(const GrainWindow &w,
-                                    int upperLimit) noexcept {
+int GrainIndex::Hasher::generateHash(const GrainWindow &w,
+                                     int upperLimit) noexcept {
   return juce::DefaultHashFunctions::generateHash(
       int(w.mix * 1024.0) ^ (w.width0 * 2) ^ (w.width1 * 3) ^ w.phase1,
       upperLimit);
 }
 
-int GrainData::Hasher::generateHash(const GrainWaveform::Key &k,
-                                    int upperLimit) noexcept {
+int GrainIndex::Hasher::generateHash(const GrainWaveform::Key &k,
+                                     int upperLimit) noexcept {
   return juce::DefaultHashFunctions::generateHash(
       k.grain ^ int(k.speedRatio * 1e3) ^ generateHash(k.window, upperLimit),
       upperLimit);
@@ -276,7 +282,3 @@ void GrainData::referToStatusOutput(juce::Value &v) {
 }
 
 GrainIndex::Ptr GrainData::getIndex() { return indexLoaderJob->getIndex(); }
-
-GrainWaveform::Ptr GrainData::getWaveform(const GrainWaveform::Key &) {
-  return nullptr;
-}
