@@ -3,24 +3,21 @@
 #include <JuceHeader.h>
 #include <mutex>
 
-struct GrainWindow {
-  float mix;
-  int width0, width1, phase1;
-
-  GrainWindow(float maxGrainWidthSamples, float mix, float w0, float w1,
-              float p1);
-  bool operator==(const GrainWindow &) noexcept;
-};
-
 class GrainWaveform : public juce::ReferenceCountedObject {
 public:
   using Ptr = juce::ReferenceCountedObjectPtr<GrainWaveform>;
 
+  struct Window {
+    float mix;
+    int width0, width1, phase1;
+    Window(float maxWidthSamples, float mix, float w0, float w1, float p1);
+    bool operator==(const Window &) noexcept;
+  };
+
   struct Key {
     unsigned grain;
     float speedRatio;
-    GrainWindow window;
-
+    Window window;
     bool operator==(const Key &) noexcept;
   };
 
@@ -77,7 +74,7 @@ public:
 
 private:
   struct Hasher {
-    int generateHash(const GrainWindow &, int) noexcept;
+    int generateHash(const GrainWaveform::Window &, int) noexcept;
     int generateHash(const GrainWaveform::Key &, int) noexcept;
   };
 

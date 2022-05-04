@@ -209,22 +209,22 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformLoaderThread)
 };
 
-GrainWindow::GrainWindow(float maxGrainWidthSamples, float mix, float w0,
-                         float w1, float p1)
+GrainWaveform::Window::Window(float maxWidthSamples, float mix, float w0,
+                              float w1, float p1)
     : mix(juce::jlimit(0.f, 1.f, mix)),
-      width0(1 + std::round(juce::jlimit(0.f, 1.f, w0) *
-                            (maxGrainWidthSamples - 1.f))),
+      width0(1 +
+             std::round(juce::jlimit(0.f, 1.f, w0) * (maxWidthSamples - 1.f))),
       width1(width0 + std::round(juce::jlimit(0.f, 1.f, w0) *
-                                 (maxGrainWidthSamples - float(width0)))),
+                                 (maxWidthSamples - float(width0)))),
       phase1(std::round(juce::jlimit(-1.f, 1.f, p1) *
-                        (maxGrainWidthSamples - float(width1)))) {
+                        (maxWidthSamples - float(width1)))) {
   jassert(mix >= 0.f && mix <= 1.f);
-  jassert(width0 >= 1 && width0 <= std::ceil(maxGrainWidthSamples));
-  jassert(width1 >= width0 && width1 <= std::ceil(maxGrainWidthSamples));
-  jassert(std::abs(phase1) <= std::ceil(maxGrainWidthSamples));
+  jassert(width0 >= 1 && width0 <= std::ceil(maxWidthSamples));
+  jassert(width1 >= width0 && width1 <= std::ceil(maxWidthSamples));
+  jassert(std::abs(phase1) <= std::ceil(maxWidthSamples));
 }
 
-bool GrainWindow::operator==(const GrainWindow &o) noexcept {
+bool GrainWaveform::Window::operator==(const Window &o) noexcept {
   return mix == o.mix && width0 == o.width0 && width1 == o.width1 &&
          phase1 == o.phase1;
 }
@@ -239,7 +239,7 @@ GrainWaveform::GrainWaveform(const Key &key, juce::uint64 grainX,
 
 GrainWaveform::~GrainWaveform() {}
 
-int GrainIndex::Hasher::generateHash(const GrainWindow &w,
+int GrainIndex::Hasher::generateHash(const GrainWaveform::Window &w,
                                      int upperLimit) noexcept {
   return juce::DefaultHashFunctions::generateHash(
       int(w.mix * 1024.0) ^ (w.width0 * 2) ^ (w.width1 * 3) ^ w.phase1,
