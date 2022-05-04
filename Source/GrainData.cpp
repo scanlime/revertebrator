@@ -2,15 +2,124 @@
 
 class ZipReader64 {
 public:
-  ZipReader64(const juce::File &file)
-      : stream(file), buffered(&stream, 8192, false), fileSize(file.getSize()) {
+  ZipReader64(const juce::File &file) : stream(file), fileSize(file.getSize()) {
+    readHeaders();
   }
   virtual ~ZipReader64() {}
 
+  juce::InputStream *open(const juce::String &name) {
+    auto f = files[name];
+    if (f.compressed > 0) {
+      auto region =
+          new juce::SubregionStream(&stream, f.offset, f.compressed, false);
+      if (f.uncompressed != f.compressed) {
+        return new juce::GZIPDecompressorInputStream(
+            region, true,
+            juce::GZIPDecompressorInputStream::Format::deflateFormat,
+            f.uncompressed);
+      } else {
+        return region;
+      }
+    }
+    return nullptr;
+  }
+
 private:
+  struct FileInfo {
+    juce::int64 compressed{0}, uncompressed{0}, offset{0};
+  };
+
+  struct EndOfCentralDirectory {
+    juce::int64 dirOffset{0}, dirSize{0}, totalDirEntries{0};
+
+    bool read(juce::InputStream &in, juce::int64 pos, juce::int64 fileSize) {
+      in.setPosition(pos);
+
+      // Optional 64-bit EOCD locator may appear before the EOCD
+      uint32_t eocd64Locator_signature = in.readInt();
+      uint32_t eocd64Locator_disk = in.readInt();
+      uint64_t eocd64Locator_offset = in.readInt64();
+      uint32_t eocd64Locator_totalDisks = in.readInt();
+
+      // Original EOCD
+      uint32_t eocd_signature = in.readInt();
+      uint16_t eocd_thisDisk = in.readShort();
+      uint16_t eocd_dirDisk = in.readShort();
+      uint16_t eocd_diskDirEntries = in.readShort();
+      uint16_t eocd_totalDirEntries = in.readShort();
+      uint32_t eocd_dirSize = in.readInt();
+      uint32_t eocd_dirOffset = in.readInt();
+      uint16_t eocd_commentLen = in.readShort();
+
+      if (eocd_signature == 0x06054b50 && eocd_thisDisk == 0 &&
+          eocd_dirDisk == 0 && eocd_diskDirEntries == eocd_totalDirEntries &&
+          pos + readLength + eocd_commentLen <= fileSize) {
+        dirOffset = eocd_dirOffset;
+        dirSize = eocd_dirSize;
+        totalDirEntries = eocd_totalDirEntries;
+      } else {
+        return false;
+      }
+
+      if (eocd64Locator_signature == 0x07064b50 && eocd64Locator_disk == 0 &&
+          eocd64Locator_totalDisks == 1 && eocd64Locator_offset < pos) {
+        in.setPosition(eocd64Locator_offset);
+
+        // Optional EOCD64
+        uint32_t eocd64_signature = in.readInt();
+        uint64_t eocd64_size = in.readInt64();
+        uint16_t eocd64_versionMadeBy = in.readShort();
+        uint16_t eocd64_versionToExtract = in.readShort();
+        uint32_t eocd64_thisDisk = in.readInt();
+        uint32_t eocd64_dirDisk = in.readInt();
+        uint64_t eocd64_diskDirEntries = in.readInt64();
+        uint64_t eocd64_totalDirEntries = in.readInt64();
+        uint64_t eocd64_dirSize = in.readInt64();
+        uint64_t eocd64_dirOffset = in.readInt64();
+
+        if (eocd64_signature == 0x06064b50 && eocd64_thisDisk == 0 &&
+            eocd64_dirDisk == 0 &&
+            eocd64_diskDirEntries == eocd64_totalDirEntries) {
+          // If EOCD64 looks good, it overrides original EOCD
+          dirOffset = eocd64_dirOffset;
+          dirSize = eocd64_dirSize;
+          totalDirEntries = eocd64_totalDirEntries;
+        }
+      }
+      return true;
+    }
+
+    bool search(juce::InputStream &in, juce::int64 fileSize) {
+      auto first = std::max<juce::int64>(0, fileSize - readLength);
+      auto last = std::max<juce::int64>(0, fileSize - maxSpaceAfterward);
+      for (auto pos = first; pos >= last; pos--) {
+        if (read(in, pos, fileSize)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+  private:
+    static constexpr int readLength = 42;
+    static constexpr int maxSpaceAfterward = 64 * 1024;
+  };
+
   juce::FileInputStream stream;
-  juce::BufferedInputStream buffered;
   juce::int64 fileSize;
+  juce::HashMap<juce::String, FileInfo> files;
+
+  void readHeaders() {
+    juce::BufferedInputStream buffered(&stream, 8192, false);
+
+    EndOfCentralDirectory eocd;
+    if (!eocd.search(buffered, fileSize)) {
+      return;
+    }
+
+    printf("found central dir, %lld %lld %lld\n", eocd.dirOffset, eocd.dirSize,
+           eocd.totalDirEntries);
+  }
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZipReader64)
 };
