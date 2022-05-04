@@ -13,7 +13,7 @@ public:
   juce::File file;
 
   unsigned numGrains{0}, numBins{0}, numChannels{0};
-  double sampleRate{0}, maxGrainWidth{0};
+  float sampleRate{0}, maxGrainWidth{0};
   juce::uint64 numSamples{0}, soundByteOffset{0}, soundByteLength{0};
 
   juce::Array<unsigned> binX;
@@ -21,6 +21,10 @@ public:
   juce::Array<juce::uint64> grainX;
 
   juce::Result status;
+
+  inline float maxGrainWidthSamples() const {
+    return sampleRate * maxGrainWidth;
+  }
 
   inline unsigned closestBinForPitch(float hz) const {
     auto x = std::lower_bound(binF0.begin(), binF0.end(), hz) - binF0.begin();

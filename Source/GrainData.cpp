@@ -1,103 +1,26 @@
 #include "GrainData.h"
 
-using juce::DefaultHashFunctions;
-using juce::Result;
-using juce::String;
-using juce::ThreadPool;
-using juce::ThreadPoolJob;
-using juce::Value;
-
-class GrainData::IndexLoaderJob : private ThreadPoolJob,
-                                  private Value::Listener {
+class Zip64Reader {
 public:
-  IndexLoaderJob(ThreadPool &pool) : ThreadPoolJob("grain-index"), pool(pool) {
-    srcValue.addListener(this);
-  }
-
-  ~IndexLoaderJob() override { pool.waitForJobToFinish(this, -1); }
-
-  void referFileInputTo(const Value &v) {
-    juce::ScopedLock guard(valuesMutex);
-    srcValue.referTo(v);
-  }
-
-  void referToStatusOutput(Value &v) {
-    juce::ScopedLock guard(valuesMutex);
-    v.referTo(statusValue);
-  }
-
-  GrainIndex::Ptr getIndex() {
-    std::lock_guard<std::mutex> guard(indexMutex);
-    return indexPtr;
-  }
+  Zip64Reader(const juce::File &file) : stream(file) {}
+  virtual ~Zip64Reader() {}
 
 private:
-  void valueChanged(Value &) {
-    juce::ScopedLock guard(valuesMutex);
-    if (srcValue.toString().isNotEmpty()) {
-      statusValue.setValue("Loading grain index...");
-      if (!isPending) {
-        isPending = true;
-        pool.addJob(this, false);
-      }
-    }
-  }
+  juce::FileInputStream stream;
 
-  JobStatus runJob() override {
-    String srcToLoad;
-    {
-      juce::ScopedLock guard(valuesMutex);
-      srcToLoad = srcValue.toString();
-      if (srcToLoad == latestLoadingAttempt) {
-        isPending = false;
-        return JobStatus::jobHasFinished;
-      }
-      latestLoadingAttempt = srcToLoad;
-    }
-    GrainIndex::Ptr newIndex = new GrainIndex(srcToLoad);
-    String newStatus = newIndex->status.wasOk()
-                           ? newIndex->describeToString()
-                           : newIndex->status.getErrorMessage();
-    {
-      std::lock_guard<std::mutex> guard(indexMutex);
-      std::swap(indexPtr, newIndex);
-    }
-    {
-      juce::ScopedLock guard(valuesMutex);
-      statusValue.setValue(newStatus);
-    }
-    // Check again in case a change occurred while we were loading
-    return JobStatus::jobNeedsRunningAgain;
-  }
-
-  ThreadPool &pool;
-
-  // Nonrecursive mutex for index ptr
-  std::mutex indexMutex;
-  GrainIndex::Ptr indexPtr;
-
-  // Recursive mutex for input/output Values
-  juce::CriticalSection valuesMutex;
-  Value srcValue, statusValue;
-  bool isPending{false};
-  String latestLoadingAttempt;
-};
-
-class GrainData::WaveformLoaderThread : public juce::Thread {
-public:
-  WaveformLoaderThread() : Thread("grain-waveform") {}
-
-  void run() override {}
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Zip64Reader)
 };
 
 GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
-
 GrainIndex::~GrainIndex() {}
 
-Result GrainIndex::load() {
+juce::Result GrainIndex::load() {
   if (!file.existsAsFile()) {
-    return Result::fail("No grain data file");
+    return juce::Result::fail("No grain data file");
   }
+
+  printf("what if we loaded a file... %s\n", file.getFullPathName().toUTF8());
+  Zip64Reader zip(file);
 
   /*
       int entryIndex = result->zip->getIndexOfFileName("index.json");
@@ -157,18 +80,19 @@ Result GrainIndex::load() {
           return "Can't read from sound file";
         }
   */
-  return Result::ok();
+  return juce::Result::ok();
 }
 
-String GrainIndex::describeToString() const {
-  auto pr = pitchRange();
+juce::String GrainIndex::describeToString() const {
+  using juce::String;
   return String(numGrains) + " grains, " + String(numBins) + " bins, " +
-         String(maxGrainWidth, 1) + " sec, " + String(pr.getStart(), 1) +
-         " - " + String(pr.getEnd(), 1) + " Hz, " +
+         String(maxGrainWidth, 1) + " sec, " +
+         String(pitchRange().getStart(), 1) + " - " +
+         String(pitchRange().getEnd(), 1) + " Hz, " +
          numSamplesToString(numSamples);
 }
 
-String GrainIndex::numSamplesToString(juce::uint64 samples) {
+juce::String GrainIndex::numSamplesToString(juce::uint64 samples) {
   static const struct {
     const char *prefix;
     double scale;
@@ -181,13 +105,118 @@ String GrainIndex::numSamplesToString(juce::uint64 samples) {
   while (samples < unit->scale && unit->precision > 0) {
     unit++;
   }
-  return String(samples / unit->scale, unit->precision) + " " + unit->prefix +
-         "samples";
+  return juce::String(samples / unit->scale, unit->precision) + " " +
+         unit->prefix + "samples";
 }
 
-GrainWindow::GrainWindow(const GrainIndex &, float mix, float w0, float w1,
+class GrainData::IndexLoaderJob : private juce::ThreadPoolJob,
+                                  private juce::Value::Listener {
+public:
+  IndexLoaderJob(juce::ThreadPool &pool)
+      : ThreadPoolJob("grain-index"), pool(pool) {
+    srcValue.addListener(this);
+  }
+
+  ~IndexLoaderJob() override { pool.waitForJobToFinish(this, -1); }
+
+  void referFileInputTo(const juce::Value &v) {
+    juce::ScopedLock guard(valuesRecursiveMutex);
+    srcValue.referTo(v);
+  }
+
+  void referToStatusOutput(juce::Value &v) {
+    juce::ScopedLock guard(valuesRecursiveMutex);
+    v.referTo(statusValue);
+  }
+
+  GrainIndex::Ptr getIndex() {
+    std::lock_guard<std::mutex> guard(indexMutex);
+    return indexPtr;
+  }
+
+private:
+  void valueChanged(juce::Value &) {
+    juce::ScopedLock guard(valuesRecursiveMutex);
+    if (srcValue.toString().isNotEmpty()) {
+      statusValue.setValue("Loading grain index...");
+      if (!isPending) {
+        isPending = true;
+        pool.addJob(this, false);
+      }
+    }
+  }
+
+  JobStatus runJob() override {
+    juce::String srcToLoad;
+    {
+      juce::ScopedLock guard(valuesRecursiveMutex);
+      srcToLoad = srcValue.toString();
+      if (srcToLoad == latestLoadingAttempt) {
+        isPending = false;
+        return JobStatus::jobHasFinished;
+      }
+      latestLoadingAttempt = srcToLoad;
+    }
+    GrainIndex::Ptr newIndex = new GrainIndex(srcToLoad);
+    juce::String newStatus = newIndex->status.wasOk()
+                                 ? newIndex->describeToString()
+                                 : newIndex->status.getErrorMessage();
+    {
+      std::lock_guard<std::mutex> guard(indexMutex);
+      std::swap(indexPtr, newIndex);
+    }
+    {
+      juce::ScopedLock guard(valuesRecursiveMutex);
+      statusValue.setValue(newStatus);
+    }
+    // Check again in case a change occurred while we were loading
+    return JobStatus::jobNeedsRunningAgain;
+  }
+
+  juce::ThreadPool &pool;
+
+  std::mutex indexMutex;
+  GrainIndex::Ptr indexPtr;
+
+  juce::CriticalSection valuesRecursiveMutex;
+  juce::Value srcValue, statusValue;
+  bool isPending{false};
+  juce::String latestLoadingAttempt;
+
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IndexLoaderJob)
+};
+
+class GrainData::WaveformLoaderThread : public juce::Thread {
+public:
+  WaveformLoaderThread() : Thread("grain-waveform") {}
+
+  void run() override {
+    while (!threadShouldExit()) {
+      printf("Bored waveform loader thread says hi\n");
+      wait(-1);
+    }
+  }
+
+private:
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformLoaderThread)
+};
+
+GrainWindow::GrainWindow(const GrainIndex &index, float mix, float w0, float w1,
                          float p1)
-    : mix(mix), width0(0), width1(0), phase1(0) {}
+    : mix(juce::jlimit(0.f, 1.f, mix)),
+      width0(1 + std::round(juce::jlimit(0.f, 1.f, w0) *
+                            (index.maxGrainWidthSamples() - 1.f))),
+      width1(width0 +
+             std::round(juce::jlimit(0.f, 1.f, w0) *
+                        (index.maxGrainWidthSamples() - float(width0)))),
+      phase1(std::round(juce::jlimit(-1.f, 1.f, p1) *
+                        (index.maxGrainWidthSamples() - float(width1)))) {
+  jassert(mix >= 0.f && mix <= 1.f);
+  jassert(width0 >= 1 && width0 <= std::ceil(index.maxGrainWidthSamples()));
+  jassert(width1 >= width0 &&
+          width1 <= std::ceil(index.maxGrainWidthSamples()));
+  jassert(std::abs(phase1) <= std::ceil(index.maxGrainWidthSamples()));
+}
 
 bool GrainWindow::operator==(const GrainWindow &o) noexcept {
   return mix == o.mix && width0 == o.width0 && width1 == o.width1 &&
@@ -206,28 +235,43 @@ GrainWaveform::~GrainWaveform() {}
 
 int GrainData::Hasher::generateHash(const GrainWindow &w,
                                     int upperLimit) noexcept {
-  return DefaultHashFunctions::generateHash(
+  return juce::DefaultHashFunctions::generateHash(
       int(w.mix * 1024.0) ^ (w.width0 * 2) ^ (w.width1 * 3) ^ w.phase1,
       upperLimit);
 }
 
 int GrainData::Hasher::generateHash(const GrainWaveform::Key &k,
                                     int upperLimit) noexcept {
-  return DefaultHashFunctions::generateHash(
+  return juce::DefaultHashFunctions::generateHash(
       k.grain ^ int(k.speedRatio * 1e3) ^ generateHash(k.window, upperLimit),
       upperLimit);
 }
 
 GrainData::GrainData(juce::ThreadPool &generalPurposeThreads)
-    : indexLoaderJob(std::make_unique<IndexLoaderJob>(generalPurposeThreads)) {}
+    : indexLoaderJob(std::make_unique<IndexLoaderJob>(generalPurposeThreads)) {
+  for (auto i = juce::SystemStats::getNumCpus(); i; --i) {
+    waveformLoaderThreads.add(new WaveformLoaderThread());
+  }
+  for (auto *t : waveformLoaderThreads) {
+    t->startThread();
+  }
+}
 
-GrainData::~GrainData() {}
+GrainData::~GrainData() {
+  for (auto *t : waveformLoaderThreads) {
+    t->signalThreadShouldExit();
+    t->notify();
+  }
+  for (auto *t : waveformLoaderThreads) {
+    t->waitForThreadToExit(-1);
+  }
+}
 
-void GrainData::referFileInputTo(const Value &v) {
+void GrainData::referFileInputTo(const juce::Value &v) {
   indexLoaderJob->referFileInputTo(v);
 }
 
-void GrainData::referToStatusOutput(Value &v) {
+void GrainData::referToStatusOutput(juce::Value &v) {
   indexLoaderJob->referToStatusOutput(v);
 }
 
