@@ -1,18 +1,18 @@
 #include "GrainData.h"
 
-class Zip64Reader {
+class ZipReader64 {
 public:
-  Zip64Reader(const juce::File &file)
+  ZipReader64(const juce::File &file)
       : stream(file), buffered(&stream, 8192, false), fileSize(file.getSize()) {
   }
-  virtual ~Zip64Reader() {}
+  virtual ~ZipReader64() {}
 
 private:
   juce::FileInputStream stream;
   juce::BufferedInputStream buffered;
   juce::int64 fileSize;
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Zip64Reader)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZipReader64)
 };
 
 GrainIndex::GrainIndex(const juce::File &file)
@@ -25,7 +25,7 @@ juce::Result GrainIndex::loadIndex() {
   }
 
   printf("what if we loaded a file... %s\n", file.getFullPathName().toUTF8());
-  Zip64Reader zip(file);
+  ZipReader64 zip(file);
 
   /*
       int entryIndex = result->zip->getIndexOfFileName("index.json");
