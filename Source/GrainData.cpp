@@ -7,18 +7,28 @@ public:
   }
   virtual ~ZipReader64() {}
 
-  juce::InputStream *open(const juce::String &name) {
+  juce::Range<juce::int64> getByteRange(const juce::String &name) {
+    auto f = files[name];
+    if (f.compressed > 0 && f.compressed == f.uncompressed) {
+      return juce::Range<juce::int64>(f.offset, f.offset + f.uncompressed);
+    } else {
+      return juce::Range<juce::int64>();
+    }
+  }
+
+  std::unique_ptr<juce::InputStream> open(const juce::String &name) {
     auto f = files[name];
     if (f.compressed > 0) {
       auto region =
           new juce::SubregionStream(&stream, f.offset, f.compressed, false);
       if (f.uncompressed != f.compressed) {
-        return new juce::GZIPDecompressorInputStream(
+        auto gz = new juce::GZIPDecompressorInputStream(
             region, true,
             juce::GZIPDecompressorInputStream::Format::deflateFormat,
             f.uncompressed);
+        return std::unique_ptr<juce::InputStream>(gz);
       } else {
-        return region;
+        return std::unique_ptr<juce::InputStream>(region);
       }
     }
     return nullptr;
@@ -31,6 +41,9 @@ private:
 
   struct EndOfCentralDirectory {
     juce::int64 dirOffset{0}, dirSize{0}, totalDirEntries{0};
+
+    static constexpr int readLength = 42;
+    static constexpr int maxSpaceAfterward = 64 * 1024;
 
     bool read(juce::InputStream &in, juce::int64 pos, juce::int64 fileSize) {
       in.setPosition(pos);
@@ -99,10 +112,116 @@ private:
       }
       return false;
     }
+  };
 
-  private:
-    static constexpr int readLength = 42;
-    static constexpr int maxSpaceAfterward = 64 * 1024;
+  struct LocalFileHeader {
+    juce::int64 fileDataOffset{0};
+
+    bool read(juce::InputStream &in) {
+      // We won't bother validating most of these or loading 64-bit extensions,
+      // the copy in the central directory is used instead.
+      uint32_t file_signature = in.readInt();
+      uint16_t file_versionToExtract = in.readShort();
+      uint16_t file_bits = in.readShort();
+      uint16_t file_compressType = in.readShort();
+      uint16_t file_time = in.readShort();
+      uint16_t file_date = in.readShort();
+      uint32_t file_crc = in.readInt();
+      uint32_t file_compressedSize = in.readInt();
+      uint32_t file_uncompressedSize = in.readInt();
+      uint16_t file_nameLen = in.readShort();
+      uint16_t file_extraLen = in.readShort();
+
+      if (file_signature == 0x04034b50) {
+        fileDataOffset = in.getPosition() + file_nameLen + file_extraLen;
+        return true;
+      } else {
+        return false;
+      }
+    }
+  };
+
+  struct CentralFileHeader {
+    juce::String name;
+    FileInfo content;
+    juce::int64 localHeaderOffset{0};
+
+    bool read(juce::InputStream &in) {
+      uint32_t file_signature = in.readInt();
+      uint16_t file_versionMadeBy = in.readShort();
+      uint16_t file_versionToExtract = in.readShort();
+      uint16_t file_bits = in.readShort();
+      uint16_t file_compressType = in.readShort();
+      uint16_t file_time = in.readShort();
+      uint16_t file_date = in.readShort();
+      uint32_t file_crc = in.readInt();
+      uint32_t file_compressedSize = in.readInt();
+      uint32_t file_uncompressedSize = in.readInt();
+      uint16_t file_nameLen = in.readShort();
+      uint16_t file_extraLen = in.readShort();
+      uint16_t file_commentLen = in.readShort();
+      uint16_t file_diskNum = in.readShort();
+      uint16_t file_intAttrs = in.readShort();
+      uint16_t file_extAttrs = in.readInt();
+      uint32_t file_offset = in.readInt();
+
+      if (file_signature == 0x02014b50 && file_diskNum == 0) {
+        content.compressed = file_compressedSize;
+        content.uncompressed = file_uncompressedSize;
+        localHeaderOffset = file_offset;
+      } else {
+        return false;
+      }
+
+      juce::MemoryBlock nameUtf8;
+      in.readIntoMemoryBlock(nameUtf8, file_nameLen);
+      name = nameUtf8.toString();
+
+      // Search through extension headers, we need the 64-bit info
+      auto pos = in.getPosition();
+      auto nextHeaderAt = pos + file_extraLen + file_commentLen;
+      while (pos + 4 <= nextHeaderAt) {
+        uint16_t extra_id = in.readShort();
+        uint16_t extra_size = in.readShort();
+        if (extra_id == 0x0001) {
+          // 64-bit extra file data
+          if (extra_size >= 8 * 1) {
+            content.uncompressed = in.readInt64();
+          }
+          if (extra_size >= 8 * 2) {
+            content.compressed = in.readInt64();
+          }
+          if (extra_size >= 8 * 3) {
+            localHeaderOffset = in.readInt64();
+          }
+        }
+        pos += 4 + extra_size;
+        in.setPosition(pos);
+      }
+
+      // Now that both 32-bit and 64-bit sizes have been parsed,
+      // check if the compression type is consistent with supported values.
+      bool isUncompressed =
+          file_compressType == 0 && content.compressed == content.uncompressed;
+      bool isDeflate =
+          file_compressType == 8 && content.compressed != content.uncompressed;
+      if (!isUncompressed && !isDeflate) {
+        return false;
+      }
+
+      // Now we're done with the central directory, get the actual
+      // file offset from the beginning of its local header.
+      LocalFileHeader local;
+      in.setPosition(localHeaderOffset);
+      if (!local.read(in)) {
+        return false;
+      }
+      content.offset = local.fileDataOffset;
+
+      // Skip comment, position back at next central directory header
+      in.setPosition(nextHeaderAt);
+      return true;
+    }
   };
 
   juce::FileInputStream stream;
@@ -110,15 +229,22 @@ private:
   juce::HashMap<juce::String, FileInfo> files;
 
   void readHeaders() {
-    juce::BufferedInputStream buffered(&stream, 8192, false);
-
+    juce::BufferedInputStream buf(&stream, 8192, false);
     EndOfCentralDirectory eocd;
-    if (!eocd.search(buffered, fileSize)) {
-      return;
+    if (eocd.search(buf, fileSize)) {
+      auto pos = eocd.dirOffset;
+      auto end = std::min(fileSize, pos + eocd.dirSize);
+      while (pos < end) {
+        buf.setPosition(pos);
+        CentralFileHeader fileHeader;
+        if (fileHeader.read(buf)) {
+          pos = buf.getPosition();
+          files.set(fileHeader.name, fileHeader.content);
+        } else {
+          break;
+        }
+      }
     }
-
-    printf("found central dir, %lld %lld %lld\n", eocd.dirOffset, eocd.dirSize,
-           eocd.totalDirEntries);
   }
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZipReader64)
@@ -129,77 +255,61 @@ GrainIndex::GrainIndex(const juce::File &file)
 GrainIndex::~GrainIndex() {}
 
 juce::Result GrainIndex::loadIndex() {
+  using juce::var;
+
   if (!file.existsAsFile()) {
     return juce::Result::fail("No grain data file");
   }
 
-  printf("what if we loaded a file... %s\n", file.getFullPathName().toUTF8());
   ZipReader64 zip(file);
+  var json;
 
-  /*
-      int entryIndex = result->zip->getIndexOfFileName("index.json");
-      int entryGrains = result->zip->getIndexOfFileName("grains.u64");
-      int entrySound = result->zip->getIndexOfFileName("sound.flac");
-      if (entryIndex < 0 || entryGrains < 0 || entrySound < 0) {
-        return "Wrong file format, failed to understand archive";
+  {
+    auto file = zip.open("index.json");
+    if (file != nullptr) {
+      json = juce::JSON::parse(*file);
+    }
+  }
+  {
+    auto file = zip.open("grains.u64");
+    if (file != nullptr) {
+      juce::BufferedInputStream buf(*file, 64 * 1024);
+      while (!buf.isExhausted()) {
+        grainX.add(buf.readInt64());
       }
+    }
+  }
+  soundFileBytes = zip.getByteRange("sound.flac");
 
-      var json;
-      {
-        auto stream = std::unique_ptr<juce::InputStream>(
-            result->zip->createStreamForEntry(entryIndex));
-        if (stream) {
-          json = JSON::parse(*stream);
-        }
-      }
-      if (!json.isObject()) {
-        return "Failed to load JSON index within grain archive";
-      }
-      result->soundLen = uint64(int64(json.getProperty("sound_len", var())));
-      result->maxGrainWidth = json.getProperty("max_grain_width", var());
-      result->sampleRate = unsigned(int64(json.getProperty("sample_rate",
-     var()))); auto varBinX = json.getProperty("bin_x", var()); auto varBinF0 =
-     json.getProperty("bin_f0", var());
+  if (!json.isObject() || soundFileBytes.isEmpty() || grainX.isEmpty()) {
+    return juce::Result::fail("Wrong file format");
+  }
 
-      // Bin index (int list)
-      if (varBinX.isArray()) {
-        for (auto x : *varBinX.getArray()) {
-          result->binX.add(unsigned(int64(x)));
-        }
-      }
+  numSamples = json.getProperty("sound_len", var());
+  maxGrainWidth = json.getProperty("max_grain_width", var());
+  sampleRate = json.getProperty("sample_rate", var());
 
-      // Bin fundamental frequencies (float list)
-      if (varBinF0.isArray()) {
-        for (auto f0 : *varBinF0.getArray()) {
-          result->binF0.add(f0);
-        }
-      }
+  auto varBinX = json.getProperty("bin_x", var());
+  auto varBinF0 = json.getProperty("bin_f0", var());
 
-      // Grain X table is large so it gets a separate binary file outside the
-     JSON
-      {
-        auto stream = std::unique_ptr<juce::InputStream>(
-            result->zip->createStreamForEntry(entryGrains));
-        if (stream) {
-          juce::BufferedInputStream buffer(*stream, 64 * 1024);
-          while (!buffer.isExhausted()) {
-            result->grainX.add(uint64(buffer.readInt64()));
-          }
-        }
+  if (varBinX.isArray()) {
+    for (auto x : *varBinX.getArray()) {
+      binX.add(juce::int64(x));
+    }
+  }
 
-        juce::FlacAudioFormat flac;
-        auto formatReader = flac.createReaderFor(
-            result->zip->createStreamForEntry(entrySound), true);
-        if (!formatReader) {
-          return "Can't read from sound file";
-        }
-  */
+  if (varBinF0.isArray()) {
+    for (auto f0 : *varBinF0.getArray()) {
+      binF0.add(f0);
+    }
+  }
+
   return juce::Result::ok();
 }
 
 juce::String GrainIndex::describeToString() const {
   using juce::String;
-  return String(numGrains) + " grains, " + String(numBins) + " bins, " +
+  return String(numGrains()) + " grains, " + String(numBins()) + " bins, " +
          String(maxGrainWidth, 1) + " sec, " +
          String(pitchRange().getStart(), 1) + " - " +
          String(pitchRange().getEnd(), 1) + " Hz, " +

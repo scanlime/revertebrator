@@ -40,15 +40,19 @@ public:
 
   juce::File file;
 
-  unsigned numGrains{0}, numBins{0}, numChannels{0};
   float sampleRate{0}, maxGrainWidth{0};
-  juce::uint64 numSamples{0}, soundByteOffset{0}, soundByteLength{0};
+  juce::int64 numSamples{0};
+  juce::Range<juce::int64> soundFileBytes;
 
   juce::Array<unsigned> binX;
   juce::Array<float> binF0;
   juce::Array<juce::uint64> grainX;
 
   juce::Result status;
+
+  inline unsigned numBins() const { return binF0.size(); }
+
+  inline unsigned numGrains() const { return grainX.size(); }
 
   inline float maxGrainWidthSamples() const {
     return sampleRate * maxGrainWidth;
@@ -60,7 +64,7 @@ public:
   }
 
   inline juce::Range<float> pitchRange() const {
-    return juce::Range<float>(binF0[0], binF0[numBins - 1]);
+    return juce::Range<float>(binF0[0], binF0[numBins() - 1]);
   }
 
   inline juce::Range<unsigned> grainsForBin(unsigned bin) const {
