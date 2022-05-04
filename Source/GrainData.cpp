@@ -2,14 +2,15 @@
 
 class Zip64Reader {
 public:
-  Zip64Reader(const juce::File &file) : stream(file) {
-    printf("%lld\n", file.getSize());
+  Zip64Reader(const juce::File &file)
+      : stream(file), buffered(&stream, 8192, false), fileSize(file.getSize()) {
   }
-
   virtual ~Zip64Reader() {}
 
 private:
   juce::FileInputStream stream;
+  juce::BufferedInputStream buffered;
+  juce::int64 fileSize;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Zip64Reader)
 };
