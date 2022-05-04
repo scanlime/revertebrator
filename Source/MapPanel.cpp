@@ -52,16 +52,20 @@ private:
 class MapPanel::ImageRender : private juce::ThreadPoolJob,
                               public juce::ChangeBroadcaster {
 public:
-  ImageRender(AudioProcessor &audioProcessor)
-      : ThreadPoolJob("map_image_render"), audioProcessor(audioProcessor) {}
+  ImageRender(juce::ThreadPool &pool)
+      : ThreadPoolJob("map_image_render"), pool(pool) {}
 
-  ~ImageRender() override {
-    audioProcessor.generalPurposeThreads.waitForJobToFinish(this, -1);
-  }
+  ~ImageRender() override { pool.waitForJobToFinish(this, -1); }
 
   struct Request {
+    GrainIndex::Ptr index;
     juce::Rectangle<int> bounds;
     juce::Colour background;
+
+    bool operator==(const Request &r) {
+      return index == r.index && bounds == r.bounds &&
+             background == r.background;
+    }
 
     void usePreviewResolution() {
       constexpr int maxDimension = 120;
@@ -69,10 +73,6 @@ public:
       if (dimension > maxDimension) {
         bounds = (bounds.toFloat() * maxDimension / dimension).toNearestInt();
       }
-    }
-
-    bool operator==(const Request &r) {
-      return bounds == r.bounds && background == r.background;
     }
   };
 
@@ -85,14 +85,8 @@ public:
       isPending = true;
     }
     if (shouldAddJob) {
-      audioProcessor.generalPurposeThreads.addJob(this, false);
+      pool.addJob(this, false);
     }
-  }
-
-  void discardStored() {
-    std::lock_guard<std::mutex> guard(lock);
-    lastRequest = Request{};
-    image = nullptr;
   }
 
   void drawLatest(juce::Graphics &g, juce::Rectangle<float> location) {
@@ -103,7 +97,7 @@ public:
   }
 
 private:
-  AudioProcessor &audioProcessor;
+  juce::ThreadPool &pool;
   std::mutex lock;
   std::unique_ptr<juce::Image> image;
   Request lastRequest, nextRequest;
@@ -118,12 +112,11 @@ private:
         isPending = false;
         return JobStatus::jobHasFinished;
       }
-      if (!image) {
+      if (!image || lastRequest.index != req.index) {
         req.usePreviewResolution();
       }
     }
-    auto index = audioProcessor.grainData.getIndex();
-    auto newImage = renderImage(req, index);
+    auto newImage = render(req);
     {
       std::lock_guard<std::mutex> guard(lock);
       lastRequest = req;
@@ -134,8 +127,7 @@ private:
     return JobStatus::jobNeedsRunningAgain;
   }
 
-  static std::unique_ptr<juce::Image>
-  renderImage(const Request &req, const GrainIndex::Ptr &index) {
+  static std::unique_ptr<juce::Image> render(const Request &req) {
     constexpr double hueSpread = 18.;
     constexpr float lightnessExponent = 2.5f;
     constexpr float foregroundContrast = 0.7f;
@@ -151,9 +143,9 @@ private:
     auto image =
         std::make_unique<juce::Image>(juce::Image::RGB, width, height, false);
 
-    if (index) {
-      Layout layout(req.bounds.toFloat(), *index);
-      double numSamples = double(index->numSamples);
+    if (req.index) {
+      Layout layout(req.bounds.toFloat(), *req.index);
+      double numSamples = double(req.index->numSamples);
       juce::Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
       std::mt19937 jitterPrng;
 
@@ -193,7 +185,8 @@ private:
 
 MapPanel::MapPanel(AudioProcessor &audioProcessor)
     : audioProcessor(audioProcessor),
-      image(std::make_unique<ImageRender>(audioProcessor)) {
+      image(
+          std::make_unique<ImageRender>(audioProcessor.generalPurposeThreads)) {
   audioProcessor.grainData.referToStatusOutput(grainDataStatus);
   grainDataStatus.addListener(this);
   image->addChangeListener(this);
@@ -205,19 +198,13 @@ void MapPanel::paint(juce::Graphics &g) {
   image->drawLatest(g, getLocalBounds().toFloat());
 }
 
-void MapPanel::resized() {
-  // Start working on a new image but keep the old one
-  requestNewImage();
-}
+void MapPanel::resized() { requestNewImage(); }
 
-void MapPanel::valueChanged(juce::Value &) {
-  // Immediately discard image when the data source is changed
-  image->discardStored();
-  requestNewImage();
-}
+void MapPanel::valueChanged(juce::Value &) { requestNewImage(); }
 
 void MapPanel::requestNewImage() {
   image->requestChange(ImageRender::Request{
+      .index = audioProcessor.grainData.getIndex(),
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
   });
