@@ -14,7 +14,7 @@ public:
 
   unsigned numGrains{0}, numBins{0}, numChannels{0};
   double sampleRate{0}, maxGrainWidth{0};
-  juce::uint64 numSamples{0}, soundDataOffset{0}, soundDataLength{0};
+  juce::uint64 numSamples{0}, soundByteOffset{0}, soundByteLength{0};
 
   juce::Array<unsigned> binX;
   juce::Array<float> binF0;
