@@ -298,13 +298,16 @@ juce::Result GrainIndex::loadIndex() {
       binX.add(juce::int64(x));
     }
   }
-
   if (varBinF0.isArray()) {
     for (auto f0 : *varBinF0.getArray()) {
       binF0.add(f0);
     }
   }
 
+  if (sampleRate < 1 || maxGrainWidthSamples() < 1 || numSamples < 1 ||
+      numGrains() < 1 || numBins() < 1 || varBinX.size() != numBins() + 1) {
+    return juce::Result::fail("Bad parameters in file");
+  }
   return juce::Result::ok();
 }
 
