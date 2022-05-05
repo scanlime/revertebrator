@@ -336,20 +336,6 @@ juce::String GrainIndex::numSamplesToString(juce::uint64 samples) {
          unit->prefix + "samples";
 }
 
-GrainWaveform::Ptr GrainIndex::getWaveform(const GrainWaveform::Key &key) {
-  {
-    std::lock_guard<std::mutex> guard(cacheMutex);
-    GrainWaveform::Ptr p = cache[key];
-    if (p != nullptr) {
-      return p;
-    }
-  }
-
-  printf("gotta send this to a thread\n");
-
-  return nullptr;
-}
-
 class GrainData::IndexLoaderJob : private juce::ThreadPoolJob,
                                   private juce::Value::Listener {
 public:
@@ -515,3 +501,15 @@ void GrainData::referToStatusOutput(juce::Value &v) {
 }
 
 GrainIndex::Ptr GrainData::getIndex() { return indexLoaderJob->getIndex(); }
+
+GrainWaveform::Ptr GrainData::getWaveform(GrainIndex &index,
+                                          const GrainWaveform::Key &key) {
+  auto cached = index.getCachedWaveform(key);
+  if (cached != nullptr) {
+    return cached;
+  }
+
+  printf("gotta send this to a thread\n");
+
+  return nullptr;
+}

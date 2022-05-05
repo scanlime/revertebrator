@@ -221,7 +221,8 @@ void MapPanel::mouseMove(const juce::MouseEvent &event) {
     Layout layout(getLocalBounds().toFloat(), *index);
     auto point = layout.pointInfo(event.getPosition().toFloat());
     if (point.valid) {
-      auto wave = index->getWaveform(
+      auto wave = audioProcessor.grainData.getWaveform(
+          *index,
           GrainWaveform::Key{.grain = point.grain,
                              .speedRatio = 1.f,
                              .window = GrainWaveform::Window{

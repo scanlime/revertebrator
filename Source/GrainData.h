@@ -67,10 +67,18 @@ public:
     return juce::Range<unsigned>(binX[bin], binX[bin + 1]);
   }
 
-  GrainWaveform::Ptr getWaveform(const GrainWaveform::Key &);
-
   juce::String describeToString() const;
   static juce::String numSamplesToString(juce::uint64 numSamples);
+
+  inline void cacheWaveform(GrainWaveform::Ptr &p) {
+    std::lock_guard<std::mutex> guard(cacheMutex);
+    cache.set(p->key, p);
+  }
+
+  inline GrainWaveform::Ptr getCachedWaveform(const GrainWaveform::Key &k) {
+    std::lock_guard<std::mutex> guard(cacheMutex);
+    return cache[k];
+  }
 
 private:
   struct Hasher {
@@ -95,6 +103,7 @@ public:
   void referToStatusOutput(juce::Value &);
 
   GrainIndex::Ptr getIndex();
+  GrainWaveform::Ptr getWaveform(GrainIndex &, const GrainWaveform::Key &);
 
 private:
   class IndexLoaderJob;
