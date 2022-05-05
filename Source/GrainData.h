@@ -39,19 +39,15 @@ public:
   ~GrainIndex() override;
 
   juce::File file;
-
   float sampleRate{0}, maxGrainWidth{0};
   juce::int64 numSamples{0};
   juce::Range<juce::int64> soundFileBytes;
-
   juce::Array<unsigned> binX;
   juce::Array<float> binF0;
   juce::Array<juce::uint64> grainX;
-
   juce::Result status;
 
   inline unsigned numBins() const { return binF0.size(); }
-
   inline unsigned numGrains() const { return grainX.size(); }
 
   inline float maxGrainWidthSamples() const {

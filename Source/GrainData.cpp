@@ -6,6 +6,7 @@ public:
     readHeaders();
   }
   virtual ~ZipReader64() {}
+  bool openedOk() const { return stream.openedOk(); }
 
   juce::Range<juce::int64> getByteRange(const juce::String &name) {
     auto f = files[name];
@@ -251,6 +252,7 @@ private:
 
 GrainIndex::GrainIndex(const juce::File &file)
     : file(file), status(loadIndex()) {}
+
 GrainIndex::~GrainIndex() {}
 
 juce::Result GrainIndex::loadIndex() {
@@ -259,10 +261,12 @@ juce::Result GrainIndex::loadIndex() {
   if (!file.existsAsFile()) {
     return juce::Result::fail("No grain data file");
   }
-
   ZipReader64 zip(file);
-  var json;
+  if (!zip.openedOk()) {
+    return juce::Result::fail("Can't open file");
+  }
 
+  var json;
   {
     auto file = zip.open("index.json");
     if (file != nullptr) {
@@ -279,7 +283,6 @@ juce::Result GrainIndex::loadIndex() {
     }
   }
   soundFileBytes = zip.getByteRange("sound.flac");
-
   if (!json.isObject() || soundFileBytes.isEmpty() || grainX.isEmpty()) {
     return juce::Result::fail("Wrong file format");
   }
@@ -287,7 +290,6 @@ juce::Result GrainIndex::loadIndex() {
   numSamples = json.getProperty("sound_len", var());
   maxGrainWidth = json.getProperty("max_grain_width", var());
   sampleRate = json.getProperty("sample_rate", var());
-
   auto varBinX = json.getProperty("bin_x", var());
   auto varBinF0 = json.getProperty("bin_f0", var());
 
