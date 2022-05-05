@@ -20,5 +20,7 @@ private:
   WindowPanel windowPanel;
   ParamPanel paramPanel;
 
+  juce::Value savedWidth, savedHeight;
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessorEditor)
 };

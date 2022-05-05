@@ -6,8 +6,9 @@ using juce::Label;
 using juce::Slider;
 using juce::String;
 
-static const String knobOrder[] = {"grain_width", "grain_rate", "sel_center",
-                                   "sel_mod",     "sel_spread", "pitch_spread"};
+static const String knobOrder[] = {"win_width0", "win_width1", "win_phase1",
+                                   "win_mix",    "grain_rate", "sel_center",
+                                   "sel_mod",    "sel_spread", "pitch_spread"};
 
 ParamPanel::ParamPanel(AudioProcessor &p) {
   for (auto item : knobOrder) {

@@ -8,11 +8,20 @@ AudioProcessor::AudioProcessor()
           "Output", juce::AudioChannelSet::stereo())),
       state(*this, nullptr, "state",
             {std::make_unique<juce::AudioParameterFloat>(
-                 "grain_width", "Grain Width",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
+                 "win_width0", "Win A",
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "win_width1", "Win B",
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "win_phase1", "Phase B",
+                 juce::NormalisableRange<float>(-1.0f, 1.0f), 0.f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "win_mix", "Mix AB",
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
              std::make_unique<juce::AudioParameterFloat>(
                  "grain_rate", "Grain Rate",
-                 juce::NormalisableRange<float>(0.0f, 1000.0f), 100.f),
+                 juce::NormalisableRange<float>(0.0f, 100.0f), 10.f),
              std::make_unique<juce::AudioParameterFloat>(
                  "sel_center", "Sel Center",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
@@ -20,17 +29,17 @@ AudioProcessor::AudioProcessor()
                  "sel_mod", "Sel Mod",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "sel_spread", "Sel Spread",
+                 "sel_spread", "S.Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "pitch_spread", "Pitch Spread",
+                 "pitch_spread", "P.Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
       grainData(generalPurposeThreads) {
   state.state.addChild({"grain_data", {{"src", ""}}, {}}, -1, nullptr);
   state.state.addChild({"ui_state",
                         {
-                            {"width", 450},
-                            {"height", 450},
+                            {"width", 800},
+                            {"height", 400},
                         },
                         {}},
                        -1, nullptr);
