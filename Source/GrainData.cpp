@@ -197,11 +197,44 @@ public:
   }
 
 private:
+  class Stream : public juce::InputStream {
+  public:
+    // Minimal high performance alternative to juce::SubregionStream
+
+    Stream(const juce::File &file, const juce::Range<juce::int64> &bytes)
+        : inner(file), bytes(bytes) {
+      setPosition(0);
+    }
+
+    ~Stream() override {}
+    bool isExhausted() override { return false; }
+    juce::int64 getTotalLength() override { return bytes.getLength(); }
+
+    juce::int64 getPosition() override {
+      return inner.getPosition() - bytes.getStart();
+    }
+
+    bool setPosition(juce::int64 newPosition) override {
+      // JUCE's FLAC wrapper has a bug! (unnecessary cast to int)
+      jassert(newPosition >= 0);
+
+      return inner.setPosition(newPosition + bytes.getStart());
+    }
+
+    int read(void *destBuffer, int maxBytesToRead) {
+      return inner.read(destBuffer, maxBytesToRead);
+    }
+
+  private:
+    juce::FileInputStream inner;
+    juce::Range<juce::int64> bytes;
+  };
+
   std::mutex workMutex;
   std::deque<Job> workQueue;
 
   juce::FlacAudioFormat flac;
-  std::unique_ptr<juce::FileInputStream> stream;
+  juce::File currentFile;
   std::unique_ptr<juce::AudioFormatReader> reader;
 
   void runJob(const Job &job) {
@@ -212,17 +245,15 @@ private:
     jassert(index.isValid());
     auto grainX = index.grainX[job.key.grain];
 
-    if (!stream || stream->getFile() != index.file) {
-      stream = std::make_unique<juce::FileInputStream>(index.file);
+    if (currentFile != index.file) {
+      currentFile = index.file;
       reader = nullptr;
     }
 
     if (!reader) {
-      auto &range = index.soundFileBytes;
-      auto region = new juce::SubregionStream(stream.get(), range.getStart(),
-                                              range.getLength(), false);
+      auto stream = new Stream(index.file, index.soundFileBytes);
       reader = std::unique_ptr<juce::AudioFormatReader>(
-          flac.createReaderFor(region, true));
+          flac.createReaderFor(stream, true));
     }
 
     if (reader) {
