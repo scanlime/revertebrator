@@ -1,4 +1,6 @@
 #include "GrainData.h"
+#include <deque>
+#include <mutex>
 
 class ZipReader64 {
 public:
@@ -250,10 +252,6 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZipReader64)
 };
 
-GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
-
-GrainIndex::~GrainIndex() {}
-
 juce::Result GrainIndex::load() {
   using juce::var;
 
@@ -291,7 +289,6 @@ juce::Result GrainIndex::load() {
   sampleRate = json.getProperty("sample_rate", var());
   auto varBinX = json.getProperty("bin_x", var());
   auto varBinF0 = json.getProperty("bin_f0", var());
-
   if (varBinX.isArray()) {
     for (auto x : *varBinX.getArray()) {
       binX.add(juce::int64(x));
@@ -309,6 +306,9 @@ juce::Result GrainIndex::load() {
   }
   return juce::Result::ok();
 }
+
+GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
+GrainIndex::~GrainIndex() {}
 
 juce::String GrainIndex::describeToString() const {
   using juce::String;
@@ -415,48 +415,72 @@ private:
 
 class GrainData::WaveformLoaderThread : public juce::Thread {
 public:
+  struct Job {
+    GrainIndex::Ptr index;
+    GrainWaveform::Key key;
+  };
+
   WaveformLoaderThread() : Thread("grain-waveform") {}
+
+  void addJob(const Job &j) {
+    {
+      std::lock_guard<std::mutex> guard(workMutex);
+      workQueue.push_back(j);
+    }
+    notify();
+  }
 
   void run() override {
     while (!threadShouldExit()) {
-      printf("Bored waveform loader thread says hi\n");
-      wait(-1);
+      workMutex.lock();
+      if (workQueue.empty()) {
+        workMutex.unlock();
+        wait(-1);
+      } else {
+        Job job = workQueue.front();
+        workQueue.pop_front();
+        workMutex.unlock();
+        runJob(job);
+      }
     }
   }
 
 private:
+  std::mutex workMutex;
+  std::deque<Job> workQueue;
+
+  juce::FlacAudioFormat flac;
+  std::unique_ptr<juce::FileInputStream> stream;
+  std::unique_ptr<juce::AudioFormatReader> reader;
+
+  void runJob(const Job &job) {
+    if (!job.index) {
+      return;
+    }
+    GrainIndex &index = *job.index;
+    auto grainX = index.grainX[job.key.grain];
+
+    if (!stream || stream->getFile() != index.file) {
+      stream = std::make_unique<juce::FileInputStream>(index.file);
+      reader = nullptr;
+    }
+
+    if (!reader) {
+      auto &range = index.soundFileBytes;
+      auto region = new juce::SubregionStream(stream.get(), range.getStart(),
+                                              range.getLength(), false);
+      reader = std::unique_ptr<juce::AudioFormatReader>(
+          flac.createReaderFor(region, true));
+    }
+
+    if (reader) {
+      GrainWaveform::Ptr newWave = new GrainWaveform(job.key, grainX, *reader);
+      index.cacheWaveform(*newWave);
+    }
+  }
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WaveformLoaderThread)
 };
-
-GrainWaveform::Window::Window(float maxWidthSamples, float mix, float w0,
-                              float w1, float p1)
-    : mix(juce::jlimit(0.f, 1.f, mix)),
-      width0(1 +
-             std::round(juce::jlimit(0.f, 1.f, w0) * (maxWidthSamples - 1.f))),
-      width1(width0 + std::round(juce::jlimit(0.f, 1.f, w0) *
-                                 (maxWidthSamples - float(width0)))),
-      phase1(std::round(juce::jlimit(-1.f, 1.f, p1) *
-                        (maxWidthSamples - float(width1)))) {
-  jassert(mix >= 0.f && mix <= 1.f);
-  jassert(width0 >= 1 && width0 <= std::ceil(maxWidthSamples));
-  jassert(width1 >= width0 && width1 <= std::ceil(maxWidthSamples));
-  jassert(std::abs(phase1) <= std::ceil(maxWidthSamples));
-}
-
-bool GrainWaveform::Window::operator==(const Window &o) const noexcept {
-  return mix == o.mix && width0 == o.width0 && width1 == o.width1 &&
-         phase1 == o.phase1;
-}
-
-bool GrainWaveform::Key::operator==(const Key &o) const noexcept {
-  return grain == o.grain && speedRatio == o.speedRatio && window == o.window;
-}
-
-GrainWaveform::GrainWaveform(const Key &key, juce::uint64 grainX,
-                             juce::AudioFormatReader &reader)
-    : key(key) {}
-
-GrainWaveform::~GrainWaveform() {}
 
 int GrainIndex::Hasher::generateHash(const GrainWaveform::Window &w,
                                      int upperLimit) const noexcept {
@@ -509,7 +533,41 @@ GrainWaveform::Ptr GrainData::getWaveform(GrainIndex &index,
     return cached;
   }
 
-  printf("gotta send this to a thread\n");
-
+  // Rotate between all threads, only interacting with one thread's work queue
+  int seq = (waveformThreadSequence += 1) % waveformLoaderThreads.size();
+  waveformLoaderThreads[seq]->addJob(
+      WaveformLoaderThread::Job{.index = index, .key = key});
   return nullptr;
 }
+
+GrainWaveform::GrainWaveform(const Key &key, juce::uint64 grainX,
+                             juce::AudioFormatReader &reader)
+    : key(key) {
+  auto range = key.window.range();
+  auto numChannels = reader.getChannelLayout().size();
+  buffer.setSize(numChannels, range.getLength());
+  auto writePtr = buffer.getArrayOfWritePointers();
+
+  // 1. Load original FLAC data from the windowed area
+  if (!reader.read(writePtr, numChannels, grainX + range.getStart(),
+                   range.getLength())) {
+    buffer.clear();
+    return;
+  }
+
+  // 2. Apply window function, while tracking RMS level
+  double accum = 0.;
+  for (int i = 0; i < range.getLength(); i++) {
+    auto y = key.window.evaluate(range.getStart() + i);
+    for (int ch = 0; ch < numChannels; ch++) {
+      accum += juce::square(writePtr[ch][i] *= y);
+    }
+  }
+
+  // 3. Level normalization
+  // to do: fix units
+  // to do: resampling
+  // buffer.applyGain(1e3 / std::sqrt(accum * range.getLength() * numChannels));
+}
+
+GrainWaveform::~GrainWaveform() {}

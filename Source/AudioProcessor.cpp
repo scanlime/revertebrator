@@ -69,6 +69,25 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                   juce::MidiBuffer &midiMessages) {
   juce::ScopedNoDenormals noDenormals;
   buffer.clear(0, buffer.getNumSamples());
+
+  auto index = grainData.getIndex();
+  if (index) {
+    auto wave = grainData.getWaveform(
+        *index,
+        GrainWaveform::Key{.grain = temp_grain,
+                           .speedRatio = 0.2f,
+                           .window = GrainWaveform::Window{
+                               index->maxGrainWidthSamples(), 0, 1, 0, 0}});
+    if (wave) {
+      for (int i = 0; i < buffer.getNumSamples(); i++) {
+        temp_sample = (temp_sample + 1) % wave->buffer.getNumSamples();
+        float f = wave->buffer.getSample(0, temp_sample);
+        for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+          buffer.setSample(ch, i, f);
+        }
+      }
+    }
+  }
 }
 
 juce::AudioProcessorEditor *AudioProcessor::createEditor() {

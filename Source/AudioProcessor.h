@@ -38,6 +38,8 @@ public:
   juce::ThreadPool generalPurposeThreads{2};
   GrainData grainData;
 
+  unsigned temp_grain{0}, temp_sample{0};
+
 private:
   void attachState();
   double outputSampleRate{48000};
