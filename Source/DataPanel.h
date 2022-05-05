@@ -12,6 +12,7 @@ public:
   void resized() override;
 
 private:
+  juce::ValueTree recentItems;
   juce::Value grainDataSrc, grainDataStatus;
   juce::Label info;
   juce::FilenameComponent filename{

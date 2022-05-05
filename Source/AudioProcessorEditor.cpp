@@ -11,7 +11,7 @@ AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
   addAndMakeVisible(windowPanel);
   addAndMakeVisible(paramPanel);
 
-  auto state = p.state.state.getChildWithName("ui_state");
+  auto state = p.state.state.getChildWithName("editor_window");
   savedWidth.referTo(state.getPropertyAsValue("width", nullptr));
   savedHeight.referTo(state.getPropertyAsValue("height", nullptr));
 

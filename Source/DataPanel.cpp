@@ -4,6 +4,13 @@ using juce::FlexBox;
 using juce::FlexItem;
 
 DataPanel::DataPanel(AudioProcessor &p) {
+  recentItems = p.state.state.getChildWithName("recent_files");
+  juce::StringArray recentStrings;
+  for (auto item : recentItems) {
+    recentStrings.add(item.getProperty("src"));
+  }
+  filename.setRecentlyUsedFilenames(recentStrings);
+
   grainDataSrc.referTo(p.state.state.getChildWithName("grain_data")
                            .getPropertyAsValue("src", nullptr));
   p.grainData.referToStatusOutput(grainDataStatus);
@@ -12,6 +19,7 @@ DataPanel::DataPanel(AudioProcessor &p) {
   filename.addListener(this);
   valueChanged(grainDataSrc);
   valueChanged(grainDataStatus);
+
   addAndMakeVisible(info);
   addAndMakeVisible(filename);
 }
@@ -28,6 +36,12 @@ void DataPanel::resized() {
 
 void DataPanel::filenameComponentChanged(juce::FilenameComponent *) {
   grainDataSrc.setValue(filename.getCurrentFile().getFullPathName());
+
+  auto recentStrings = filename.getRecentlyUsedFilenames();
+  recentItems.removeAllChildren(nullptr);
+  for (auto name : recentStrings) {
+    recentItems.appendChild({"item", {{"src", name}}, {}}, nullptr);
+  }
 }
 
 void DataPanel::valueChanged(juce::Value &v) {

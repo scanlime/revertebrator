@@ -35,14 +35,17 @@ AudioProcessor::AudioProcessor()
                  "pitch_spread", "P.Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
       grainData(generalPurposeThreads) {
+
+  constexpr auto defaultWidth = 800;
+  constexpr auto defaultHeight = 400;
+
   state.state.addChild({"grain_data", {{"src", ""}}, {}}, -1, nullptr);
-  state.state.addChild({"ui_state",
-                        {
-                            {"width", 800},
-                            {"height", 400},
-                        },
+  state.state.addChild({"recent_files", {}, {}}, -1, nullptr);
+  state.state.addChild({"editor_window",
+                        {{"width", defaultWidth}, {"height", defaultHeight}},
                         {}},
                        -1, nullptr);
+
   attachState();
 }
 
