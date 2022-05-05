@@ -11,14 +11,14 @@ public:
     float mix;
     int width0, width1, phase1;
     Window(float maxWidthSamples, float mix, float w0, float w1, float p1);
-    bool operator==(const Window &) noexcept;
+    bool operator==(const Window &) const noexcept;
   };
 
   struct Key {
     unsigned grain;
     float speedRatio;
     Window window;
-    bool operator==(const Key &) noexcept;
+    bool operator==(const Key &) const noexcept;
   };
 
   GrainWaveform(const Key &, juce::uint64 grainX, juce::AudioFormatReader &);
@@ -74,8 +74,8 @@ public:
 
 private:
   struct Hasher {
-    int generateHash(const GrainWaveform::Window &, int) noexcept;
-    int generateHash(const GrainWaveform::Key &, int) noexcept;
+    int generateHash(const GrainWaveform::Window &, int) const noexcept;
+    int generateHash(const GrainWaveform::Key &, int) const noexcept;
   };
 
   std::mutex cacheMutex;

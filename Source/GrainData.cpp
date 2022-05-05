@@ -336,7 +336,17 @@ juce::String GrainIndex::numSamplesToString(juce::uint64 samples) {
          unit->prefix + "samples";
 }
 
-GrainWaveform::Ptr GrainIndex::getWaveform(const GrainWaveform::Key &) {
+GrainWaveform::Ptr GrainIndex::getWaveform(const GrainWaveform::Key &key) {
+  {
+    std::lock_guard<std::mutex> guard(cacheMutex);
+    GrainWaveform::Ptr p = cache[key];
+    if (p != nullptr) {
+      return p;
+    }
+  }
+
+  printf("gotta send this to a thread\n");
+
   return nullptr;
 }
 
@@ -447,12 +457,12 @@ GrainWaveform::Window::Window(float maxWidthSamples, float mix, float w0,
   jassert(std::abs(phase1) <= std::ceil(maxWidthSamples));
 }
 
-bool GrainWaveform::Window::operator==(const Window &o) noexcept {
+bool GrainWaveform::Window::operator==(const Window &o) const noexcept {
   return mix == o.mix && width0 == o.width0 && width1 == o.width1 &&
          phase1 == o.phase1;
 }
 
-bool GrainWaveform::Key::operator==(const Key &o) noexcept {
+bool GrainWaveform::Key::operator==(const Key &o) const noexcept {
   return grain == o.grain && speedRatio == o.speedRatio && window == o.window;
 }
 
@@ -463,14 +473,14 @@ GrainWaveform::GrainWaveform(const Key &key, juce::uint64 grainX,
 GrainWaveform::~GrainWaveform() {}
 
 int GrainIndex::Hasher::generateHash(const GrainWaveform::Window &w,
-                                     int upperLimit) noexcept {
+                                     int upperLimit) const noexcept {
   return juce::DefaultHashFunctions::generateHash(
       int(w.mix * 1024.0) ^ (w.width0 * 2) ^ (w.width1 * 3) ^ w.phase1,
       upperLimit);
 }
 
 int GrainIndex::Hasher::generateHash(const GrainWaveform::Key &k,
-                                     int upperLimit) noexcept {
+                                     int upperLimit) const noexcept {
   return juce::DefaultHashFunctions::generateHash(
       k.grain ^ int(k.speedRatio * 1e3) ^ generateHash(k.window, upperLimit),
       upperLimit);

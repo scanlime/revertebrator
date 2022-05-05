@@ -221,8 +221,13 @@ void MapPanel::mouseMove(const juce::MouseEvent &event) {
     Layout layout(getLocalBounds().toFloat(), *index);
     auto point = layout.pointInfo(event.getPosition().toFloat());
     if (point.valid) {
-      printf("grain %d bin %d, %f Hz\n", point.grain, point.bin,
-             index->binF0[point.bin]);
+      auto wave = index->getWaveform(
+          GrainWaveform::Key{.grain = point.grain,
+                             .speedRatio = 1.f,
+                             .window = GrainWaveform::Window{
+                                 index->maxGrainWidthSamples(), 0, 0, 0, 0}});
+      printf("grain %d bin %d, %f Hz, wave %p\n", point.grain, point.bin,
+             index->binF0[point.bin], wave.get());
     }
   }
 }
