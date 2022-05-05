@@ -213,7 +213,7 @@ def do_pack(args):
         yy_ptr += len(marker)
 
         for i, name in enumerate(args.inputs):
-            active = samples_per_input[i]
+            active = samples_per_input.get(i, 0)
             total = inputs[i]["ylen"]
             tqdm.write(f"{name} using {active} samples, {active/total:.2%}")
 
