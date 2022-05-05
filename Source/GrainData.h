@@ -92,6 +92,10 @@ public:
   inline unsigned numBins() const { return binF0.size(); }
   inline unsigned numGrains() const { return grainX.size(); }
 
+  inline bool isValid() const {
+    return status.wasOk() && numBins() && numGrains() && numSamples;
+  }
+
   inline float maxGrainWidthSamples() const {
     return sampleRate * maxGrainWidth;
   }

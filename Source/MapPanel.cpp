@@ -143,7 +143,7 @@ private:
     auto image =
         std::make_unique<juce::Image>(juce::Image::RGB, width, height, false);
 
-    if (req.index) {
+    if (req.index && req.index->isValid()) {
       Layout layout(req.bounds.toFloat(), *req.index);
       double numSamples = double(req.index->numSamples);
       juce::Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);

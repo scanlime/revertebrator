@@ -81,7 +81,7 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   buffer.clear(0, buffer.getNumSamples());
 
   auto index = grainData.getIndex();
-  if (index) {
+  if (index && index->isValid()) {
     auto wave = grainData.getWaveform(
         *index,
         GrainWaveform::Key{.grain = temp_grain,
