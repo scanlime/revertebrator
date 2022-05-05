@@ -42,9 +42,6 @@ private:
   struct EndOfCentralDirectory {
     juce::int64 dirOffset{0}, dirSize{0}, totalDirEntries{0};
 
-    static constexpr int readLength = 42;
-    static constexpr int maxSpaceAfterward = 64 * 1024;
-
     bool read(juce::InputStream &in, juce::int64 pos, juce::int64 fileSize) {
       in.setPosition(pos);
 
@@ -66,7 +63,7 @@ private:
 
       if (eocd_signature == 0x06054b50 && eocd_thisDisk == 0 &&
           eocd_dirDisk == 0 && eocd_diskDirEntries == eocd_totalDirEntries &&
-          pos + readLength + eocd_commentLen <= fileSize) {
+          in.getPosition() + eocd_commentLen <= fileSize) {
         dirOffset = eocd_dirOffset;
         dirSize = eocd_dirSize;
         totalDirEntries = eocd_totalDirEntries;
@@ -103,8 +100,8 @@ private:
     }
 
     bool search(juce::InputStream &in, juce::int64 fileSize) {
-      auto first = std::max<juce::int64>(0, fileSize - readLength);
-      auto last = std::max<juce::int64>(0, fileSize - maxSpaceAfterward);
+      auto first = std::max<juce::int64>(0, fileSize - (22 + 20));
+      auto last = std::max<juce::int64>(0, fileSize - (128 * 1024));
       for (auto pos = first; pos >= last; pos--) {
         if (read(in, pos, fileSize)) {
           return true;
@@ -273,7 +270,7 @@ juce::Result GrainIndex::loadIndex() {
   {
     auto file = zip.open("grains.u64");
     if (file != nullptr) {
-      juce::BufferedInputStream buf(*file, 64 * 1024);
+      juce::BufferedInputStream buf(*file, 8192);
       while (!buf.isExhausted()) {
         grainX.add(buf.readInt64());
       }
