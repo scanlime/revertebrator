@@ -170,9 +170,11 @@ private:
         return false;
       }
 
-      juce::MemoryBlock nameUtf8;
-      in.readIntoMemoryBlock(nameUtf8, file_nameLen);
-      name = nameUtf8.toString();
+      {
+        juce::MemoryBlock nameUtf8;
+        in.readIntoMemoryBlock(nameUtf8, file_nameLen);
+        name = nameUtf8.toString();
+      }
 
       // Search through extension headers, we need the 64-bit info
       auto pos = in.getPosition();
