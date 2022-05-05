@@ -81,7 +81,7 @@ private:
   std::mutex cacheMutex;
   juce::HashMap<GrainWaveform::Key, GrainWaveform::Ptr, Hasher> cache;
 
-  juce::Result loadIndex();
+  juce::Result load();
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainIndex)
 };

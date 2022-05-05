@@ -250,12 +250,11 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ZipReader64)
 };
 
-GrainIndex::GrainIndex(const juce::File &file)
-    : file(file), status(loadIndex()) {}
+GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
 
 GrainIndex::~GrainIndex() {}
 
-juce::Result GrainIndex::loadIndex() {
+juce::Result GrainIndex::load() {
   using juce::var;
 
   if (!file.existsAsFile()) {
