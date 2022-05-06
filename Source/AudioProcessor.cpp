@@ -41,6 +41,7 @@ AudioProcessor::AudioProcessor()
 
   constexpr auto width = 800;
   constexpr auto height = 400;
+  constexpr auto numVoices = 128;
 
   state.state.appendChild({"grain_data", {{"src", ""}}, {}}, nullptr);
   state.state.appendChild({"recent_files", {}, {}}, nullptr);
@@ -48,6 +49,10 @@ AudioProcessor::AudioProcessor()
       {"editor_window", {{"width", width}, {"height", height}}, {}}, nullptr);
 
   attachState();
+
+  for (auto i = 0; i < numVoices; i++) {
+    synth.addVoice(new GrainVoice());
+  }
 }
 
 AudioProcessor::~AudioProcessor() {}
@@ -66,7 +71,7 @@ const String AudioProcessor::getProgramName(int index) { return {}; }
 void AudioProcessor::changeProgramName(int index, const String &newName) {}
 
 void AudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-  outputSampleRate = sampleRate;
+  synth.setCurrentPlaybackSampleRate(sampleRate);
 }
 
 void AudioProcessor::releaseResources() {}
@@ -80,41 +85,8 @@ bool AudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const {
 
 void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                   juce::MidiBuffer &midiMessages) {
-  juce::ScopedNoDenormals noDenormals;
-  buffer.clear(0, buffer.getNumSamples());
-
-  auto wave = temp_waveForGrain(temp_grain);
-  if (wave != nullptr) {
-    temp_wave = wave;
-  }
-  if (temp_wave) {
-    for (int i = 0; i < buffer.getNumSamples(); i++) {
-      temp_sample = (temp_sample + 1) % temp_wave->buffer.getNumSamples();
-      float f = temp_wave->buffer.getSample(0, temp_sample);
-      for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
-        buffer.setSample(ch, i, f);
-      }
-    }
-  }
-}
-
-void AudioProcessor::temp_pickGrain(unsigned g) {
-  temp_grain = g;
-  temp_waveForGrain(g);
-}
-
-GrainWaveform::Ptr AudioProcessor::temp_waveForGrain(unsigned g) {
-  auto index = grainData.getIndex();
-  if (index && index->isValid() && g < index->numGrains()) {
-    auto speedRatio = 0.4f; // input samples per output sample
-    return grainData.getWaveform(
-        *index,
-        GrainWaveform::Key{
-            g, speedRatio,
-            GrainWaveform::Window{index->maxGrainWidthSamples() / speedRatio, 0,
-                                  0.01, 0, 0}});
-  }
-  return nullptr;
+  buffer.clear();
+  synth.renderNextBlock(buffer, midiMessages, 0, buffer.getNumSamples());
 }
 
 juce::AudioProcessorEditor *AudioProcessor::createEditor() {

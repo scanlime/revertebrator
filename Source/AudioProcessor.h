@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GrainData.h"
+#include "GrainSynth.h"
 #include <JuceHeader.h>
 
 class AudioProcessor : public juce::AudioProcessor {
@@ -38,15 +39,11 @@ public:
   juce::ThreadPool generalPurposeThreads{2};
   GrainData grainData;
 
-  void temp_pickGrain(unsigned);
-
 private:
   void attachState();
-  double outputSampleRate{48000};
 
-  unsigned temp_grain{0}, temp_sample{0};
-  GrainWaveform::Ptr temp_wave;
-  GrainWaveform::Ptr temp_waveForGrain(unsigned);
+  juce::Synthesiser synth;
+  GrainSound::Ptr sound;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
 };

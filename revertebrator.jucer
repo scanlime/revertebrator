@@ -18,6 +18,8 @@
       <FILE id="XrCnDc" name="DataPanel.h" compile="0" resource="0" file="Source/DataPanel.h"/>
       <FILE id="Fb4khv" name="GrainData.cpp" compile="1" resource="0" file="Source/GrainData.cpp"/>
       <FILE id="P7Hgku" name="GrainData.h" compile="0" resource="0" file="Source/GrainData.h"/>
+      <FILE id="f4s1SD" name="GrainSynth.cpp" compile="1" resource="0" file="Source/GrainSynth.cpp"/>
+      <FILE id="w6lOnk" name="GrainSynth.h" compile="0" resource="0" file="Source/GrainSynth.h"/>
       <FILE id="nZrn6R" name="MapPanel.cpp" compile="1" resource="0" file="Source/MapPanel.cpp"/>
       <FILE id="OUOI2n" name="MapPanel.h" compile="0" resource="0" file="Source/MapPanel.h"/>
       <FILE id="SWnmag" name="ParamPanel.cpp" compile="1" resource="0" file="Source/ParamPanel.cpp"/>
