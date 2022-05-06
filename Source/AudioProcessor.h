@@ -38,12 +38,15 @@ public:
   juce::ThreadPool generalPurposeThreads{2};
   GrainData grainData;
 
-  unsigned temp_grain{0}, temp_sample{0};
-  GrainWaveform::Ptr temp_wave;
+  void temp_pickGrain(unsigned);
 
 private:
   void attachState();
   double outputSampleRate{48000};
+
+  unsigned temp_grain{0}, temp_sample{0};
+  GrainWaveform::Ptr temp_wave;
+  GrainWaveform::Ptr temp_waveForGrain(unsigned);
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
 };

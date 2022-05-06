@@ -1,8 +1,5 @@
 #include "DataPanel.h"
 
-using juce::FlexBox;
-using juce::FlexItem;
-
 DataPanel::DataPanel(AudioProcessor &p) {
   recentItems = p.state.state.getChildWithName("recent_files");
   juce::StringArray recentStrings;
@@ -27,6 +24,8 @@ DataPanel::DataPanel(AudioProcessor &p) {
 DataPanel::~DataPanel() {}
 
 void DataPanel::resized() {
+  using juce::FlexBox;
+  using juce::FlexItem;
   FlexBox box;
   box.flexDirection = FlexBox::Direction::column;
   box.items.add(FlexItem(filename).withMinHeight(24));

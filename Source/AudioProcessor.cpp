@@ -20,19 +20,22 @@ AudioProcessor::AudioProcessor()
                  "win_mix", "Mix AB",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "grain_rate", "Grain Rate",
-                 juce::NormalisableRange<float>(0.0f, 100.0f), 10.f),
+                 "grain_rate", "Gr Rate",
+                 juce::NormalisableRange<float>(0.01f, 100.0f), 10.f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "sel_center", "Sel Center",
+                 "speed_warp", "Spd Warp",
+                 juce::NormalisableRange<float>(0.1f, 4.f), 1.f),
+             std::make_unique<juce::AudioParameterFloat>(
+                 "sel_center", "Sel",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "sel_mod", "Sel Mod",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f),
+                 "sel_mod", "S Mod", juce::NormalisableRange<float>(0.0f, 1.0f),
+                 1.0f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "sel_spread", "S.Spread",
+                 "sel_spread", "S Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
              std::make_unique<juce::AudioParameterFloat>(
-                 "pitch_spread", "P.Spread",
+                 "pitch_spread", "P Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
       grainData(generalPurposeThreads) {
 
@@ -80,19 +83,9 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   juce::ScopedNoDenormals noDenormals;
   buffer.clear(0, buffer.getNumSamples());
 
-  auto index = grainData.getIndex();
-  auto g = temp_grain;
-  if (index && index->isValid() && g < index->numGrains()) {
-    auto speedRatio = 0.4f; // input samples per output sample
-    auto w = grainData.getWaveform(
-        *index,
-        GrainWaveform::Key{
-            g, speedRatio,
-            GrainWaveform::Window{index->maxGrainWidthSamples() / speedRatio, 0,
-                                  0.01, 0, 0}});
-    if (w) {
-      temp_wave = w;
-    }
+  auto wave = temp_waveForGrain(temp_grain);
+  if (wave != nullptr) {
+    temp_wave = wave;
   }
   if (temp_wave) {
     for (int i = 0; i < buffer.getNumSamples(); i++) {
@@ -103,6 +96,25 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
       }
     }
   }
+}
+
+void AudioProcessor::temp_pickGrain(unsigned g) {
+  temp_grain = g;
+  temp_waveForGrain(g);
+}
+
+GrainWaveform::Ptr AudioProcessor::temp_waveForGrain(unsigned g) {
+  auto index = grainData.getIndex();
+  if (index && index->isValid() && g < index->numGrains()) {
+    auto speedRatio = 0.4f; // input samples per output sample
+    return grainData.getWaveform(
+        *index,
+        GrainWaveform::Key{
+            g, speedRatio,
+            GrainWaveform::Window{index->maxGrainWidthSamples() / speedRatio, 0,
+                                  0.01, 0, 0}});
+  }
+  return nullptr;
 }
 
 juce::AudioProcessorEditor *AudioProcessor::createEditor() {

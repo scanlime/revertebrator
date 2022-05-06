@@ -1,17 +1,19 @@
 #include "ParamPanel.h"
 
-using juce::FlexBox;
-using juce::FlexItem;
-using juce::Label;
-using juce::Slider;
-using juce::String;
-
-static const String knobOrder[] = {"win_width0", "win_width1", "win_phase1",
-                                   "win_mix",    "grain_rate", "sel_center",
-                                   "sel_mod",    "sel_spread", "pitch_spread"};
+static const juce::String knobOrder[] = {
+    "win_width0", "win_width1",   "win_phase1", "win_mix",    "grain_rate",
+    "speed_warp", "pitch_spread", "sel_center", "sel_spread", "sel_mod"};
 
 ParamPanel::ParamPanel(AudioProcessor &p) {
+  using juce::Label;
+  using juce::Slider;
+
   for (auto item : knobOrder) {
+    auto param = p.state.getParameter(item);
+    if (param == nullptr) {
+      jassertfalse;
+      continue;
+    }
 
     auto knob = new Slider();
     knob->setSliderStyle(Slider::Rotary);
@@ -22,8 +24,7 @@ ParamPanel::ParamPanel(AudioProcessor &p) {
 
     auto label = new Label();
     label->attachToComponent(knob, false);
-    label->setText(p.state.getParameter(item)->getName(64),
-                   juce::dontSendNotification);
+    label->setText(param->getName(64), juce::dontSendNotification);
     label->setJustificationType(juce::Justification::centred);
     addAndMakeVisible(*label);
     labels.add(label);
@@ -36,8 +37,9 @@ ParamPanel::ParamPanel(AudioProcessor &p) {
 ParamPanel::~ParamPanel() {}
 
 void ParamPanel::resized() {
-  FlexBox outer;
-  FlexBox inner;
+  using juce::FlexBox;
+  using juce::FlexItem;
+  FlexBox outer, inner;
   outer.flexDirection = FlexBox::Direction::column;
   outer.justifyContent = FlexBox::JustifyContent::flexEnd;
   inner.justifyContent = FlexBox::JustifyContent::center;
