@@ -1,10 +1,6 @@
 #pragma once
 
 #include "AudioProcessor.h"
-#include "DataPanel.h"
-#include "MapPanel.h"
-#include "ParamPanel.h"
-#include "WindowPanel.h"
 #include <JuceHeader.h>
 
 class AudioProcessorEditor : public juce::AudioProcessorEditor {
@@ -15,12 +11,10 @@ public:
   void resized() override;
 
 private:
-  DataPanel dataPanel;
-  MapPanel mapPanel;
-  WindowPanel windowPanel;
-  ParamPanel paramPanel;
+  struct Parts;
 
   juce::Value savedWidth, savedHeight;
+  std::unique_ptr<Parts> parts;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessorEditor)
 };
