@@ -126,10 +126,13 @@ private:
   std::unique_ptr<juce::FileInputStream> stream;
   juce::Range<juce::int64> byteRange;
   FLAC__StreamDecoder *decoder{nullptr};
+  juce::Interpolators::WindowedSinc interpolator;
 
-  GrainWaveform::Ptr loadingBuffer;
-  juce::int64 firstSampleToLoad{0};
-  int loadingProgress;
+  struct {
+    juce::AudioBuffer<float> audio;
+    juce::int64 firstSample;
+    int progress, size;
+  } buffer;
 
   void runJob(const Job &job) {
     if (!job.index) {
@@ -138,6 +141,7 @@ private:
     GrainIndex &index = *job.index;
     jassert(index.isValid());
 
+    // (Re)open the input file as necessary
     if (!stream || stream->getFile() != index.file) {
       stream = std::make_unique<juce::FileInputStream>(index.file);
       byteRange = index.soundFileBytes;
@@ -147,6 +151,7 @@ private:
       }
     }
 
+    // (Re)init the FLAC decoder as necessary
     if (decoder == nullptr) {
       decoder = FLAC__stream_decoder_new();
       jassert(decoder != nullptr);
@@ -167,32 +172,60 @@ private:
       }
     }
 
+    jassert(job.key.grain < index.numGrains());
+    juce::int64 grainX = index.grainX[job.key.grain];
+    auto speedRatio = job.key.speedRatio;
     auto range = job.key.window.range();
 
-    // Callbacks append to this buffer as we read compressed blocks
-    loadingBuffer = new GrainWaveform(job.key, 1, range.getLength());
-    loadingProgress = 0;
+    auto resamplerLatency = interpolator.getBaseLatency() / speedRatio;
+    juce::Range<int> resampledRange(
+        std::floor(range.getStart() * speedRatio - resamplerLatency),
+        std::ceil(range.getEnd() * speedRatio));
 
-    jassert(job.key.grain < index.numGrains());
-    firstSampleToLoad = index.grainX[job.key.grain] + range.getStart();
-    jassert(firstSampleToLoad >= 0);
+    buffer.firstSample = resampledRange.getStart() + grainX;
+    buffer.size = resampledRange.getLength();
+    buffer.progress = 0;
 
-    if (!FLAC__stream_decoder_seek_absolute(decoder, firstSampleToLoad)) {
+    // Read in FLAC frames containing the audio we want
+    if (!FLAC__stream_decoder_seek_absolute(
+            decoder, std::max<juce::int64>(0, buffer.firstSample))) {
       jassertfalse;
       return;
     };
-
-    while (loadingProgress < range.getLength()) {
+    while (buffer.progress < buffer.size) {
       if (!FLAC__stream_decoder_process_single(decoder)) {
         jassertfalse;
         return;
       }
     }
+    jassert(buffer.progress == buffer.size);
+    jassert(buffer.audio.getNumSamples() == buffer.size);
 
-    jassert(loadingBuffer->key == job.key);
-    job.key.window.applyToBuffer(loadingBuffer->buffer);
-    index.cacheWaveform(*loadingBuffer);
-    loadingBuffer = nullptr;
+    auto numChannels = buffer.audio.getNumChannels();
+    GrainWaveform::Ptr wave =
+        new GrainWaveform(job.key, numChannels, range.getLength());
+    auto readPtrs = buffer.audio.getArrayOfReadPointers();
+    auto writePtrs = wave->buffer.getArrayOfWritePointers();
+
+    // Resample audio from temp buffer into GrainWaveform buffer
+    for (auto ch = 0; ch < numChannels; ch++) {
+      interpolator.reset();
+      interpolator.process(speedRatio, readPtrs[ch], writePtrs[ch],
+                           range.getLength());
+    }
+
+    // Apply windowing and RMS normalization in-place in GrainWaveform buffer
+    double accum = 0.;
+    for (int i = 0; i < range.getLength(); i++) {
+      auto window = job.key.window.evaluate(range.getStart() + i);
+      for (int ch = 0; ch < numChannels; ch++) {
+        accum += double(juce::square<float>(writePtrs[ch][i] *= window));
+      }
+    }
+    auto rms = std::sqrt(accum / double(numChannels * range.getLength()));
+    wave->buffer.applyGain(1.0 / rms);
+
+    index.cacheWaveform(*wave);
   }
 
   static FLAC__StreamDecoderSeekStatus
@@ -248,42 +281,39 @@ private:
   flacWrite(const FLAC__StreamDecoder *, const FLAC__Frame *frame,
             const FLAC__int32 *const buffer[], void *client_data) {
 
-    auto self = static_cast<WaveformLoaderThread *>(client_data);
-    auto blocksize = frame->header.blocksize;
-    auto numChannels = self->loadingBuffer->buffer.getNumChannels();
-    if (frame->header.channels < numChannels) {
-      return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
-    }
-
+    juce::int64 sampleNumber = frame->header.number.sample_number;
     if (frame->header.number_type != FLAC__FRAME_NUMBER_TYPE_SAMPLE_NUMBER) {
       return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
     }
-    auto sampleNumber = frame->header.number.sample_number;
 
-    auto progress = self->loadingProgress;
-    auto firstSampleToLoad = self->firstSampleToLoad;
-    auto outputSize = self->loadingBuffer->buffer.getNumSamples();
-    auto output = self->loadingBuffer->buffer.getArrayOfWritePointers();
-    jassert(progress <= outputSize);
+    auto self = static_cast<WaveformLoaderThread *>(client_data);
+    self->buffer.audio.setSize(frame->header.channels, self->buffer.size);
 
-    if (sampleNumber > firstSampleToLoad + progress) {
-      // Past where we need to be
-      return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
-    }
-    auto samplesToSkip = firstSampleToLoad + progress - sampleNumber;
-    if (samplesToSkip >= blocksize) {
-      // Skipping entire blocks
-      return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
-    }
-    int samplesToStore =
-        std::min<int>(blocksize - samplesToSkip, outputSize - progress);
+    auto progress = self->buffer.progress;
+    auto remaining = self->buffer.size - progress;
+    juce::int64 wantSampleNumber = self->buffer.firstSample + progress;
 
-    for (auto ch = 0; ch < numChannels; ch++) {
+    auto samplesToZeroFill = std::max<int>(
+        0, std::min<int>(sampleNumber - wantSampleNumber, remaining));
+    auto samplesToSkip =
+        std::max<int>(0, std::min<int>(wantSampleNumber - sampleNumber,
+                                       remaining - samplesToZeroFill));
+    auto samplesToStore = std::max<int>(
+        0, std::min<int>(frame->header.blocksize - samplesToSkip,
+                         remaining - samplesToZeroFill - samplesToSkip));
+
+    auto output = self->buffer.audio.getArrayOfWritePointers();
+    for (auto ch = 0; ch < frame->header.channels; ch++) {
+      for (auto i = 0; i < samplesToZeroFill; i++) {
+        output[ch][progress + i] = 0.f;
+      }
       for (auto i = 0; i < samplesToStore; i++) {
-        output[ch][progress + i] = buffer[ch][samplesToSkip + i];
+        output[ch][progress + samplesToZeroFill + i] =
+            buffer[ch][samplesToSkip + i];
       }
     }
-    self->loadingProgress = progress + samplesToStore;
+    self->buffer.progress = progress + samplesToZeroFill + samplesToStore;
+    jassert(self->buffer.progress <= self->buffer.size);
     return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
   }
 

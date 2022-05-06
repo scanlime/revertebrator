@@ -1,9 +1,0 @@
-- broken
-  - FLAC > 2GB still broken?
-  - Units are wrong on attempt at RMS scaling
-  - no resampling
-  - not using speedRatio to adjust window
-
-- ui window graph not implemented
-- no ui indication of disk usage / dropouts
-- next steps in audio synth

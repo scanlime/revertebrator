@@ -34,23 +34,6 @@ public:
       return win0 * (1.f - mix) + win1 * mix;
     }
 
-    inline void applyToBuffer(juce::AudioBuffer<float> &buf) const noexcept {
-      auto channels = buf.getNumChannels();
-      auto samples = buf.getNumSamples();
-      auto ptr = buf.getArrayOfWritePointers();
-      double accum = 0.;
-
-      for (int i = 0; i < samples; i++) {
-        auto y = evaluate(range().getStart() + i);
-        for (int ch = 0; ch < channels; ch++) {
-          accum += double(juce::square<float>(ptr[ch][i] *= y));
-        }
-      }
-
-      auto rms = std::sqrt(accum / double(channels) / double(samples));
-      buf.applyGain(1.0 / rms);
-    }
-
     inline bool operator==(const Window &o) const noexcept {
       return mix == o.mix && width0 == o.width0 && width1 == o.width1 &&
              phase1 == o.phase1;

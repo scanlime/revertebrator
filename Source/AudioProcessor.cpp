@@ -83,11 +83,13 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto index = grainData.getIndex();
   auto g = temp_grain;
   if (index && index->isValid() && g < index->numGrains()) {
+    auto speedRatio = 0.4f; // input samples per output sample
     auto w = grainData.getWaveform(
         *index,
         GrainWaveform::Key{
-            g, 0.2f,
-            GrainWaveform::Window{index->maxGrainWidthSamples(), 0, .1, 0, 0}});
+            g, speedRatio,
+            GrainWaveform::Window{index->maxGrainWidthSamples() / speedRatio, 0,
+                                  1, 0, 0}});
     if (w) {
       temp_wave = w;
     }
