@@ -41,18 +41,19 @@ AudioProcessor::AudioProcessor()
 
   constexpr auto width = 800;
   constexpr auto height = 400;
-  constexpr auto numVoices = 128;
-
-  state.state.appendChild({"grain_data", {{"src", ""}}, {}}, nullptr);
-  state.state.appendChild({"recent_files", {}, {}}, nullptr);
   state.state.appendChild(
       {"editor_window", {{"width", width}, {"height", height}}, {}}, nullptr);
+  state.state.appendChild({"grain_data", {{"src", ""}}, {}}, nullptr);
+  state.state.appendChild({"recent_files", {}, {}}, nullptr);
+  attachToState();
 
-  attachState();
-
+  constexpr auto numVoices = 128;
   for (auto i = 0; i < numVoices; i++) {
     synth.addVoice(new GrainVoice());
   }
+
+  grainData.referToStatusOutput(grainDataStatus);
+  grainDataStatus.addListener(this);
 }
 
 AudioProcessor::~AudioProcessor() {}
@@ -72,6 +73,7 @@ void AudioProcessor::changeProgramName(int index, const String &newName) {}
 
 void AudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   synth.setCurrentPlaybackSampleRate(sampleRate);
+  updateSoundFromState();
 }
 
 void AudioProcessor::releaseResources() {}
@@ -101,12 +103,47 @@ void AudioProcessor::getStateInformation(juce::MemoryBlock &destData) {
 void AudioProcessor::setStateInformation(const void *data, int sizeInBytes) {
   if (auto xml = getXmlFromBinary(data, sizeInBytes))
     state.replaceState(juce::ValueTree::fromXml(*xml));
-  attachState();
+  attachToState();
+  updateSoundFromState();
 }
 
-void AudioProcessor::attachState() {
+void AudioProcessor::valueTreePropertyChanged(juce::ValueTree &,
+                                              const juce::Identifier &) {
+  // Something changed in the state tree, assume it affects sound parameters
+  updateSoundFromState();
+}
+
+void AudioProcessor::valueChanged(juce::Value &) {
+  // Grain data status change, we may have a new index
+  updateSoundFromState();
+}
+
+void AudioProcessor::attachToState() {
   grainData.referFileInputTo(state.state.getChildWithName("grain_data")
                                  .getPropertyAsValue("src", nullptr));
+  state.state.addListener(this);
+}
+
+void AudioProcessor::updateSoundFromState() {
+  GrainIndex::Ptr index = grainData.getIndex();
+  if (index == nullptr) {
+    return;
+  }
+  GrainSound::Params params = {
+      .sampleRate = synth.getSampleRate(),
+      .win_width0 = 1,
+      .win_width1 = 0,
+      .win_phase1 = 0,
+      .win_mix = 0,
+      .grain_rate = 1,
+      .speed_warp = 1,
+      .sel_center = 0.5,
+      .sel_mod = 0,
+      .sel_spread = 0,
+      .pitch_spread = 0,
+  };
+  synth.addSound(new GrainSound(*index, params));
+  synth.removeSound(0);
 }
 
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {

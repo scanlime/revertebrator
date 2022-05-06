@@ -4,7 +4,9 @@
 #include "GrainSynth.h"
 #include <JuceHeader.h>
 
-class AudioProcessor : public juce::AudioProcessor {
+class AudioProcessor : public juce::AudioProcessor,
+                       private juce::ValueTree::Listener,
+                       private juce::Value::Listener {
 public:
   AudioProcessor();
   ~AudioProcessor() override;
@@ -40,10 +42,14 @@ public:
   GrainData grainData;
 
 private:
-  void attachState();
+  void attachToState();
+  void updateSoundFromState();
+  void valueChanged(juce::Value &) override;
+  void valueTreePropertyChanged(juce::ValueTree &,
+                                const juce::Identifier &) override;
 
   juce::Synthesiser synth;
-  GrainSound::Ptr sound;
+  juce::Value grainDataStatus;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
 };
