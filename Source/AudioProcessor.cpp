@@ -9,10 +9,10 @@ AudioProcessor::AudioProcessor()
       state(*this, nullptr, "state",
             {std::make_unique<juce::AudioParameterFloat>(
                  "win_width0", "Win A",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
              std::make_unique<juce::AudioParameterFloat>(
                  "win_width1", "Win B",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
+                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
              std::make_unique<juce::AudioParameterFloat>(
                  "win_phase1", "Phase B",
                  juce::NormalisableRange<float>(-1.0f, 1.0f), 0.f),
@@ -89,7 +89,7 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
         GrainWaveform::Key{
             g, speedRatio,
             GrainWaveform::Window{index->maxGrainWidthSamples() / speedRatio, 0,
-                                  1, 0, 0}});
+                                  0.01, 0, 0}});
     if (w) {
       temp_wave = w;
     }
