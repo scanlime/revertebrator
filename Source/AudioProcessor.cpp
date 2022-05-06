@@ -81,20 +81,23 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   buffer.clear(0, buffer.getNumSamples());
 
   auto index = grainData.getIndex();
-  if (index && index->isValid()) {
-    auto wave = grainData.getWaveform(
+  auto g = temp_grain;
+  if (index && index->isValid() && g < index->numGrains()) {
+    auto w = grainData.getWaveform(
         *index,
-        GrainWaveform::Key{.grain = temp_grain,
-                           .speedRatio = 0.2f,
-                           .window = GrainWaveform::Window{
-                               index->maxGrainWidthSamples(), 0, 1, 0, 0}});
-    if (wave) {
-      for (int i = 0; i < buffer.getNumSamples(); i++) {
-        temp_sample = (temp_sample + 1) % wave->buffer.getNumSamples();
-        float f = wave->buffer.getSample(0, temp_sample);
-        for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
-          buffer.setSample(ch, i, f);
-        }
+        GrainWaveform::Key{
+            g, 0.2f,
+            GrainWaveform::Window{index->maxGrainWidthSamples(), 0, .1, 0, 0}});
+    if (w) {
+      temp_wave = w;
+    }
+  }
+  if (temp_wave) {
+    for (int i = 0; i < buffer.getNumSamples(); i++) {
+      temp_sample = (temp_sample + 1) % temp_wave->buffer.getNumSamples();
+      float f = temp_wave->buffer.getSample(0, temp_sample);
+      for (int ch = 0; ch < buffer.getNumChannels(); ch++) {
+        buffer.setSample(ch, i, f);
       }
     }
   }

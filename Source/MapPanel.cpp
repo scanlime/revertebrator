@@ -221,8 +221,6 @@ void MapPanel::mouseMove(const juce::MouseEvent &event) {
     Layout layout(getLocalBounds().toFloat(), *index);
     auto point = layout.pointInfo(event.getPosition().toFloat());
     if (point.valid) {
-      printf("grain %d bin %d, %f Hz\n", point.grain, point.bin,
-             index->binF0[point.bin]);
       audioProcessor.temp_grain = point.grain;
     }
   }

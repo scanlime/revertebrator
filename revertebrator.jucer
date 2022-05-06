@@ -16,24 +16,25 @@
             file="Source/AudioProcessorEditor.h"/>
       <FILE id="P6UDlc" name="DataPanel.cpp" compile="1" resource="0" file="Source/DataPanel.cpp"/>
       <FILE id="XrCnDc" name="DataPanel.h" compile="0" resource="0" file="Source/DataPanel.h"/>
+      <FILE id="Fb4khv" name="GrainData.cpp" compile="1" resource="0" file="Source/GrainData.cpp"/>
+      <FILE id="P7Hgku" name="GrainData.h" compile="0" resource="0" file="Source/GrainData.h"/>
       <FILE id="nZrn6R" name="MapPanel.cpp" compile="1" resource="0" file="Source/MapPanel.cpp"/>
       <FILE id="OUOI2n" name="MapPanel.h" compile="0" resource="0" file="Source/MapPanel.h"/>
       <FILE id="SWnmag" name="ParamPanel.cpp" compile="1" resource="0" file="Source/ParamPanel.cpp"/>
       <FILE id="f3Rdx1" name="ParamPanel.h" compile="0" resource="0" file="Source/ParamPanel.h"/>
-      <FILE id="Fb4khv" name="GrainData.cpp" compile="1" resource="0" file="Source/GrainData.cpp"/>
-      <FILE id="P7Hgku" name="GrainData.h" compile="0" resource="0" file="Source/GrainData.h"/>
       <FILE id="sJekXR" name="WindowPanel.cpp" compile="1" resource="0" file="Source/WindowPanel.cpp"/>
       <FILE id="wPXm6u" name="WindowPanel.h" compile="0" resource="0" file="Source/WindowPanel.h"/>
+      <FILE id="obS4Pg" name="ZipReader64.h" compile="0" resource="0" file="Source/ZipReader64.h"/>
     </GROUP>
   </MAINGROUP>
   <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"
-               JUCE_USE_OGGVORBIS="0" JUCE_USE_FLAC="1" JUCE_USE_MP3AUDIOFORMAT="0"
+               JUCE_USE_OGGVORBIS="0" JUCE_USE_FLAC="0" JUCE_USE_MP3AUDIOFORMAT="0"
                JUCE_USE_LAME_AUDIO_FORMAT="0" JUCE_USE_WINDOWS_MEDIA_FORMAT="0"
                JUCE_USE_CDREADER="0" JUCE_USE_CDBURNER="0" JUCE_USE_CURL="0"
                JUCE_WEB_BROWSER="0" JUCE_USE_WIN_WEBVIEW2="0" JUCE_ENABLE_LIVE_CONSTANT_EDITOR="0"
                JUCE_USE_XRANDR="0" JUCE_USE_XINERAMA="0" JUCE_WIN_PER_MONITOR_DPI_AWARE="0"/>
   <EXPORTFORMATS>
-    <LINUX_MAKE targetFolder="Builds/LinuxMakefile">
+    <LINUX_MAKE targetFolder="Builds/LinuxMakefile" externalLibraries="FLAC">
       <CONFIGURATIONS>
         <CONFIGURATION isDebug="1" name="Debug" targetName="revertebrator"/>
         <CONFIGURATION isDebug="0" name="Release" targetName="revertebrator"/>
@@ -41,7 +42,6 @@
       <MODULEPATHS>
         <MODULEPATH id="juce_audio_basics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_devices" path="/usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_plugin_client" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_processors" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
@@ -51,6 +51,7 @@
         <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_extra" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
       </MODULEPATHS>
     </LINUX_MAKE>
     <VS2022 targetFolder="Builds/VisualStudio2022">
@@ -61,7 +62,6 @@
       <MODULEPATHS>
         <MODULEPATH id="juce_audio_basics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_devices" path="/usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_plugin_client" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_processors" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
@@ -71,6 +71,7 @@
         <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_extra" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
       </MODULEPATHS>
     </VS2022>
     <XCODE_MAC targetFolder="Builds/MacOSX">
@@ -81,7 +82,6 @@
       <MODULEPATHS>
         <MODULEPATH id="juce_audio_basics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_devices" path="/usr/share/juce/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_plugin_client" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_processors" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
@@ -91,6 +91,7 @@
         <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
         <MODULEPATH id="juce_gui_extra" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
   </EXPORTFORMATS>

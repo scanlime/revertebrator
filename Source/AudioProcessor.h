@@ -39,6 +39,7 @@ public:
   GrainData grainData;
 
   unsigned temp_grain{0}, temp_sample{0};
+  GrainWaveform::Ptr temp_wave;
 
 private:
   void attachState();
