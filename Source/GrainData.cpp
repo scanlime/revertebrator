@@ -343,6 +343,24 @@ int GrainIndex::Hasher::generateHash(const GrainWaveform::Key &k,
       upperLimit);
 }
 
+void GrainIndex::cacheWaveform(GrainWaveform &wave) {
+  std::lock_guard<std::mutex> guard(cacheMutex);
+  cache.set(wave.key, wave);
+}
+
+GrainWaveform::Ptr
+GrainIndex::getCachedWaveformOrInsertEmpty(const GrainWaveform::Key &k) {
+  std::lock_guard<std::mutex> guard(cacheMutex);
+  auto ptr = cache[k];
+  if (ptr) {
+    return ptr;
+  } else {
+    GrainWaveform::Ptr empty = new GrainWaveform(k, 0, 0);
+    cache.set(k, *empty);
+    return nullptr;
+  }
+}
+
 juce::String GrainIndex::describeToString() const {
   using juce::String;
   return String(numGrains()) + " grains, " + String(numBins()) + " bins, " +
@@ -454,24 +472,6 @@ void GrainData::referToStatusOutput(juce::Value &v) {
 }
 
 GrainIndex::Ptr GrainData::getIndex() { return indexLoaderJob->getIndex(); }
-
-void GrainIndex::cacheWaveform(GrainWaveform &wave) {
-  std::lock_guard<std::mutex> guard(cacheMutex);
-  cache.set(wave.key, wave);
-}
-
-GrainWaveform::Ptr
-GrainIndex::getCachedWaveformOrInsertEmpty(const GrainWaveform::Key &k) {
-  std::lock_guard<std::mutex> guard(cacheMutex);
-  auto ptr = cache[k];
-  if (ptr) {
-    return ptr;
-  } else {
-    GrainWaveform::Ptr empty = new GrainWaveform(k, 0, 0);
-    cache.set(k, *empty);
-    return nullptr;
-  }
-}
 
 GrainWaveform::Ptr GrainData::getWaveform(GrainIndex &index,
                                           const GrainWaveform::Key &key) {
