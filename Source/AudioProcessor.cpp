@@ -36,7 +36,7 @@ AudioProcessor::AudioProcessor()
              std::make_unique<juce::AudioParameterFloat>(
                  "pitch_spread", "P Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
-      grainData(generalPurposeThreads) {
+      grainData(generalPurposeThreads), synth(128) {
 
   constexpr auto width = 800;
   constexpr auto height = 400;
@@ -45,11 +45,6 @@ AudioProcessor::AudioProcessor()
   state.state.appendChild({"grain_data", {{"src", ""}}, {}}, nullptr);
   state.state.appendChild({"recent_files", {}, {}}, nullptr);
   attachToState();
-
-  constexpr auto numVoices = 128;
-  for (auto i = 0; i < numVoices; i++) {
-    synth.addVoice(new GrainVoice());
-  }
 
   grainData.referToStatusOutput(grainDataStatus);
   grainDataStatus.addListener(this);
@@ -122,31 +117,26 @@ void AudioProcessor::attachToState() {
 
 void AudioProcessor::updateSoundFromState() {
   GrainIndex::Ptr index = grainData.getIndex();
-  if (index == nullptr) {
-    return;
-  }
-  bool isReplacing = synth.getNumSounds() > 0;
-  printf("update sound\n");
-  synth.addSound(new GrainSound(
-      *index,
-      {.sampleRate = synth.getSampleRate(),
-       .grainRate = state.getParameterAsValue("grain_rate").getValue(),
-       .window =
-           {
-               .mix = state.getParameterAsValue("win_mix").getValue(),
-               .width0 = state.getParameterAsValue("win_width0").getValue(),
-               .width1 = state.getParameterAsValue("win_width1").getValue(),
-               .phase1 = state.getParameterAsValue("win_phase1").getValue(),
-           },
-       .sequence = {
-           .selCenter = state.getParameterAsValue("sel_center").getValue(),
-           .selMod = state.getParameterAsValue("sel_mod").getValue(),
-           .selSpread = state.getParameterAsValue("sel_spread").getValue(),
-           .speedWarp = state.getParameterAsValue("speed_warp").getValue(),
-           .pitchSpread = state.getParameterAsValue("pitch_spread").getValue(),
-       }}));
-  if (isReplacing) {
-    synth.removeSound(0);
+  if (index != nullptr) {
+    synth.changeSound(
+        *index,
+        {.sampleRate = synth.getSampleRate(),
+         .grainRate = state.getParameterAsValue("grain_rate").getValue(),
+         .window =
+             {
+                 .mix = state.getParameterAsValue("win_mix").getValue(),
+                 .width0 = state.getParameterAsValue("win_width0").getValue(),
+                 .width1 = state.getParameterAsValue("win_width1").getValue(),
+                 .phase1 = state.getParameterAsValue("win_phase1").getValue(),
+             },
+         .sequence = {
+             .selCenter = state.getParameterAsValue("sel_center").getValue(),
+             .selMod = state.getParameterAsValue("sel_mod").getValue(),
+             .selSpread = state.getParameterAsValue("sel_spread").getValue(),
+             .speedWarp = state.getParameterAsValue("speed_warp").getValue(),
+             .pitchSpread =
+                 state.getParameterAsValue("pitch_spread").getValue(),
+         }});
   }
 }
 

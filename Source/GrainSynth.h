@@ -74,3 +74,19 @@ private:
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainVoice)
 };
+
+class GrainSynth : public juce::Synthesiser {
+public:
+  GrainSynth(int numVoices);
+  ~GrainSynth() override;
+
+  void changeSound(GrainIndex &, const GrainSound::Params &);
+
+  void noteOn(int, int, float) override;
+  void handleController(int, int, int) override;
+
+private:
+  int lastModWheelValues[16];
+
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSynth)
+};

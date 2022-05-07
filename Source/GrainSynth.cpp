@@ -45,7 +45,7 @@ void GrainVoice::pitchWheelMoved(int newValue) {
 }
 
 void GrainVoice::controllerMoved(int controllerNumber, int newValue) {
-  if (controllerNumber == 1) {
+  if (controllerNumber == 0x01) {
     currentModWheelPosition = newValue;
     if (sequence != nullptr) {
       sequence->midi.modWheel = newValue;
@@ -61,4 +61,42 @@ void GrainVoice::renderNextBlock(juce::AudioBuffer<float> &outputBuffer,
            numSamples, sequence->params.speedWarp, sequence->midi.modWheel,
            sequence->midi.pitchWheel, p.grain, p.gain);
   }
+}
+
+GrainSynth::GrainSynth(int numVoices) {
+  for (auto i = 0; i < 16; i++) {
+    lastModWheelValues[i] = 64;
+  }
+  for (auto i = 0; i < numVoices; i++) {
+    addVoice(new GrainVoice());
+  }
+}
+
+GrainSynth::~GrainSynth() {}
+
+void GrainSynth::changeSound(GrainIndex &index,
+                             const GrainSound::Params &params) {
+  auto newSound = new GrainSound(index, params);
+  juce::ScopedLock sl(lock);
+  sounds.clear();
+  sounds.add(newSound);
+}
+
+void GrainSynth::noteOn(int channel, int midiNote, float velocity) {
+  juce::ScopedLock sl(lock);
+  for (auto sound : sounds) {
+    if (sound->appliesToNote(midiNote) && sound->appliesToChannel(channel)) {
+      auto voice =
+          findFreeVoice(sound, channel, midiNote, isNoteStealingEnabled());
+      voice->controllerMoved(0x01, lastModWheelValues[channel]);
+      startVoice(voice, sound, channel, midiNote, velocity);
+    }
+  }
+}
+
+void GrainSynth::handleController(int channel, int controller, int value) {
+  if (controller == 0x01) {
+    lastModWheelValues[channel] = value;
+  }
+  juce::Synthesiser::handleController(channel, controller, value);
 }
