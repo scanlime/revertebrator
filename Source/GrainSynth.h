@@ -19,10 +19,12 @@ public:
     float gain;
   };
 
+  inline GrainSequence(const Params &p, const Midi &m) : params(p), midi(m) {}
+  inline ~GrainSequence() {}
+  Point generate();
+
   Params params;
   Midi midi;
-
-  Point generate();
 
 private:
   std::mt19937 prng;
@@ -44,6 +46,7 @@ public:
   bool appliesToChannel(int) override;
 
 private:
+  friend class GrainVoice;
   GrainIndex::Ptr index;
   Params params;
   float speedRatio;
@@ -67,7 +70,7 @@ public:
 private:
   std::unique_ptr<GrainSequence> sequence;
   std::deque<GrainSequence::Point> queue;
-  int pitchWheel{0}, modWheel{0};
+  int currentModWheelPosition{0};
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainVoice)
 };

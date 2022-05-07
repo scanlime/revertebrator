@@ -50,7 +50,6 @@ AudioProcessor::AudioProcessor()
   for (auto i = 0; i < numVoices; i++) {
     synth.addVoice(new GrainVoice());
   }
-  updateSoundFromState();
 
   grainData.referToStatusOutput(grainDataStatus);
   grainDataStatus.addListener(this);
@@ -126,25 +125,29 @@ void AudioProcessor::updateSoundFromState() {
   if (index == nullptr) {
     return;
   }
+  bool isReplacing = synth.getNumSounds() > 0;
+  printf("update sound\n");
   synth.addSound(new GrainSound(
       *index,
       {.sampleRate = synth.getSampleRate(),
-       .grainRate = state.getParameter("grain_rate")->getValue(),
+       .grainRate = state.getParameterAsValue("grain_rate").getValue(),
        .window =
            {
-               .mix = state.getParameter("win_mix")->getValue(),
-               .width0 = state.getParameter("win_width0")->getValue(),
-               .width1 = state.getParameter("win_width1")->getValue(),
-               .phase1 = state.getParameter("win_phase1")->getValue(),
+               .mix = state.getParameterAsValue("win_mix").getValue(),
+               .width0 = state.getParameterAsValue("win_width0").getValue(),
+               .width1 = state.getParameterAsValue("win_width1").getValue(),
+               .phase1 = state.getParameterAsValue("win_phase1").getValue(),
            },
        .sequence = {
-           .selCenter = state.getParameter("sel_center")->getValue(),
-           .selMod = state.getParameter("sel_mod")->getValue(),
-           .selSpread = state.getParameter("sel_spread")->getValue(),
-           .speedWarp = state.getParameter("speed_warp")->getValue(),
-           .pitchSpread = state.getParameter("pitch_spread")->getValue(),
+           .selCenter = state.getParameterAsValue("sel_center").getValue(),
+           .selMod = state.getParameterAsValue("sel_mod").getValue(),
+           .selSpread = state.getParameterAsValue("sel_spread").getValue(),
+           .speedWarp = state.getParameterAsValue("speed_warp").getValue(),
+           .pitchSpread = state.getParameterAsValue("pitch_spread").getValue(),
        }}));
-  synth.removeSound(0);
+  if (isReplacing) {
+    synth.removeSound(0);
+  }
 }
 
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {
