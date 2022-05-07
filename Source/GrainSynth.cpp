@@ -1,5 +1,9 @@
 #include "GrainSynth.h"
 
+GrainSequence::Point GrainSequence::generate() {
+  return {grain : 0, gain : 1.0};
+}
+
 GrainSound::GrainSound(GrainIndex &index, const Params &params)
     : index(index), params(params),
       speedRatio(index.sampleRate / params.sampleRate * params.speedWarp),

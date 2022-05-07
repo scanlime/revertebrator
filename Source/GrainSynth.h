@@ -2,21 +2,30 @@
 
 #include "GrainData.h"
 #include <JuceHeader.h>
+#include <random>
 
 class GrainSequence {
 public:
   struct Params {
     float selCenter, selMod, selSpread, pitchSpread;
   };
-
-  struct Root {
-    int midiNote, pitchBend, modulation;
+  struct Midi {
+    int midiNote, pitchWheel, modWheel;
+    float velocity;
+  };
+  struct Point {
+    unsigned grain;
+    float gain;
   };
 
-  GrainSequence(const Params &params, const Root &root);
-  virtual ~GrainSequence();
+  Params params;
+  Midi midi;
+
+  Point generate();
 
 private:
+  std::mt19937 prng;
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSequence)
 };
 
@@ -55,5 +64,8 @@ public:
   void renderNextBlock(juce::AudioBuffer<float> &, int, int) override;
 
 private:
+  std::unique_ptr<GrainSequence> sequence;
+  std::deque<GrainSequence::Point> queue;
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainVoice)
 };
