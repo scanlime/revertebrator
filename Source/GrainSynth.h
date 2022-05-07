@@ -7,7 +7,8 @@
 class GrainSequence {
 public:
   struct Params {
-    float selCenter, selMod, selSpread, pitchSpread;
+    float selCenter, selMod, selSpread;
+    float speedWarp, pitchSpread;
   };
   struct Midi {
     int midiNote, pitchWheel, modWheel;
@@ -32,7 +33,7 @@ private:
 class GrainSound : public juce::SynthesiserSound {
 public:
   struct Params {
-    double sampleRate, speedWarp, grainRate;
+    double sampleRate, grainRate;
     GrainWaveform::Window::Params window;
     GrainSequence::Params sequence;
   };
@@ -66,6 +67,7 @@ public:
 private:
   std::unique_ptr<GrainSequence> sequence;
   std::deque<GrainSequence::Point> queue;
+  int pitchWheel{0}, modWheel{0};
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainVoice)
 };

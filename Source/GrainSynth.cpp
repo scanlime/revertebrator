@@ -6,7 +6,8 @@ GrainSequence::Point GrainSequence::generate() {
 
 GrainSound::GrainSound(GrainIndex &index, const Params &params)
     : index(index), params(params),
-      speedRatio(index.sampleRate / params.sampleRate * params.speedWarp),
+      speedRatio(index.sampleRate / params.sampleRate *
+                 params.sequence.speedWarp),
       window(index.maxGrainWidthSamples() / speedRatio, params.window) {}
 
 GrainSound::~GrainSound() {}
