@@ -12,7 +12,6 @@ public:
 
   void paint(juce::Graphics &) override;
   void resized() override;
-  void mouseMove(const juce::MouseEvent &) override;
 
 private:
   class Layout;

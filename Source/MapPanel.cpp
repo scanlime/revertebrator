@@ -214,14 +214,3 @@ void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
   const juce::MessageManagerLock mmlock;
   repaint();
 }
-
-void MapPanel::mouseMove(const juce::MouseEvent &event) {
-  GrainIndex::Ptr index = audioProcessor.grainData.getIndex();
-  if (index) {
-    Layout layout(getLocalBounds().toFloat(), *index);
-    auto point = layout.pointInfo(event.getPosition().toFloat());
-    if (point.valid) {
-      printf("mouse at grain %d\n", point.grain);
-    }
-  }
-}
