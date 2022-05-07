@@ -2,7 +2,7 @@
 
 GrainSound::GrainSound(GrainIndex &index, const Params &params)
     : index(index), params(params),
-      speedRatio(index.sampleRate / params.sampleRate * params.speed_warp),
+      speedRatio(index.sampleRate / params.sampleRate * params.speedWarp),
       window(index.maxGrainWidthSamples() / speedRatio, params.window) {}
 
 GrainSound::~GrainSound() {}

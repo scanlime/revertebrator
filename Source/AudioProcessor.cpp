@@ -125,16 +125,15 @@ void AudioProcessor::updateSoundFromState() {
   if (index == nullptr) {
     return;
   }
+
   GrainSound::Params params = {
       .sampleRate = synth.getSampleRate(),
+      .speedWarp = 1,
+      .grainRate = 1,
       .window = {1, 0, 0, 0},
-      .grain_rate = 1,
-      .speed_warp = 1,
-      .sel_center = 0.5,
-      .sel_mod = 0,
-      .sel_spread = 0,
-      .pitch_spread = 0,
-  };
+      .sequence = {
+          .selCenter = 0.5, .selMod = 0, .selSpread = 0, .pitchSpread = 0}};
+
   synth.addSound(new GrainSound(*index, params));
   synth.removeSound(0);
 }

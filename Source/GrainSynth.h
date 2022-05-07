@@ -3,13 +3,29 @@
 #include "GrainData.h"
 #include <JuceHeader.h>
 
+class GrainSequence {
+public:
+  struct Params {
+    float selCenter, selMod, selSpread, pitchSpread;
+  };
+
+  struct Root {
+    int midiNote, pitchBend, modulation;
+  };
+
+  GrainSequence(const Params &params, const Root &root);
+  virtual ~GrainSequence();
+
+private:
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSequence)
+};
+
 class GrainSound : public juce::SynthesiserSound {
 public:
   struct Params {
-    double sampleRate;
+    double sampleRate, speedWarp, grainRate;
     GrainWaveform::Window::Params window;
-    float grain_rate, speed_warp, sel_center, sel_mod;
-    float sel_spread, pitch_spread;
+    GrainSequence::Params sequence;
   };
 
   GrainSound(GrainIndex &index, const Params &params);
