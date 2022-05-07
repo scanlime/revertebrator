@@ -159,17 +159,10 @@ private:
         return;
       }
       stream->setPosition(byteRange.getStart());
-      {
-        auto status = FLAC__stream_decoder_init_stream(
-            decoder, flacRead, flacSeek, flacTell, flacLength, flacEOF,
-            flacWrite, flacMetadata, flacError, this);
-        jassert(status == FLAC__STREAM_DECODER_INIT_STATUS_OK);
-      }
-      {
-        auto status =
-            FLAC__stream_decoder_process_until_end_of_metadata(decoder);
-        jassert(status == true);
-      }
+      auto status = FLAC__stream_decoder_init_stream(
+          decoder, flacRead, flacSeek, flacTell, flacLength, flacEOF, flacWrite,
+          flacMetadata, flacError, this);
+      jassert(status == FLAC__STREAM_DECODER_INIT_STATUS_OK);
     }
 
     jassert(job.key.grain < index.numGrains());
