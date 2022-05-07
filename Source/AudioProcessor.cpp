@@ -1,7 +1,6 @@
 #include "AudioProcessor.h"
 #include "AudioProcessorEditor.h"
-
-using juce::String;
+#include "GrainSynth.h"
 
 AudioProcessor::AudioProcessor()
     : juce::AudioProcessor(BusesProperties().withOutput(
@@ -57,26 +56,23 @@ AudioProcessor::AudioProcessor()
 }
 
 AudioProcessor::~AudioProcessor() {}
-
-const String AudioProcessor::getName() const { return JucePlugin_Name; }
+const juce::String AudioProcessor::getName() const { return JucePlugin_Name; }
 bool AudioProcessor::hasEditor() const { return true; }
 bool AudioProcessor::acceptsMidi() const { return true; }
 bool AudioProcessor::producesMidi() const { return false; }
 bool AudioProcessor::isMidiEffect() const { return false; }
 double AudioProcessor::getTailLengthSeconds() const { return 0.0; }
-
 int AudioProcessor::getNumPrograms() { return 1; }
 int AudioProcessor::getCurrentProgram() { return 0; }
 void AudioProcessor::setCurrentProgram(int index) {}
-const String AudioProcessor::getProgramName(int index) { return {}; }
-void AudioProcessor::changeProgramName(int index, const String &newName) {}
+const juce::String AudioProcessor::getProgramName(int index) { return {}; }
+void AudioProcessor::changeProgramName(int index, const juce::String &name) {}
+void AudioProcessor::releaseResources() {}
 
 void AudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   synth.setCurrentPlaybackSampleRate(sampleRate);
   updateSoundFromState();
 }
-
-void AudioProcessor::releaseResources() {}
 
 bool AudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const {
   if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
@@ -131,10 +127,7 @@ void AudioProcessor::updateSoundFromState() {
   }
   GrainSound::Params params = {
       .sampleRate = synth.getSampleRate(),
-      .win_width0 = 1,
-      .win_width1 = 0,
-      .win_phase1 = 0,
-      .win_mix = 0,
+      .window = {1, 0, 0, 0},
       .grain_rate = 1,
       .speed_warp = 1,
       .sel_center = 0.5,

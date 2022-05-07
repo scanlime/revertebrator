@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GrainData.h"
-#include "GrainSynth.h"
 #include <JuceHeader.h>
 
 class AudioProcessor : public juce::AudioProcessor,

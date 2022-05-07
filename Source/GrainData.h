@@ -11,20 +11,23 @@ public:
     float mix;
     int width0, width1, phase1;
 
-    inline Window(float maxWidthSamples, float mix, float w0, float w1,
-                  float p1)
-        : mix(juce::jlimit(0.f, 1.f, mix)),
-          width0(1 + std::round(juce::jlimit(0.f, 1.f, w0) *
+    struct Params {
+      float mix, width0, width1, phase1;
+    };
+
+    inline Window(float maxWidthSamples, const Params &p)
+        : mix(juce::jlimit(0.f, 1.f, p.mix)),
+          width0(1 + std::round(juce::jlimit(0.f, 1.f, p.width0) *
                                 (maxWidthSamples - 1.f))),
-          width1(width0 + std::round(juce::jlimit(0.f, 1.f, w0) *
+          width1(width0 + std::round(juce::jlimit(0.f, 1.f, p.width1) *
                                      (maxWidthSamples - float(width0)))),
-          phase1(std::round(juce::jlimit(-1.f, 1.f, p1) *
+          phase1(std::round(juce::jlimit(-1.f, 1.f, p.phase1) *
                             (maxWidthSamples - float(width1)))) {
       jassert(mix >= 0.f && mix <= 1.f);
       jassert(width0 >= 1 && width0 <= std::ceil(maxWidthSamples));
       jassert(width1 >= width0 && width1 <= std::ceil(maxWidthSamples));
       jassert(std::abs(phase1) <= std::ceil(maxWidthSamples));
-    }
+    };
 
     inline float evaluate(float x) const noexcept {
       float ph0 = x / width0;

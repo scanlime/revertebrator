@@ -7,7 +7,7 @@ class GrainSound : public juce::SynthesiserSound {
 public:
   struct Params {
     double sampleRate;
-    float win_width0, win_width1, win_phase1, win_mix;
+    GrainWaveform::Window::Params window;
     float grain_rate, speed_warp, sel_center, sel_mod;
     float sel_spread, pitch_spread;
   };

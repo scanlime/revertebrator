@@ -3,8 +3,7 @@
 GrainSound::GrainSound(GrainIndex &index, const Params &params)
     : index(index), params(params),
       speedRatio(index.sampleRate / params.sampleRate * params.speed_warp),
-      window(index.maxGrainWidthSamples() / speedRatio, params.win_mix,
-             params.win_width0, params.win_width1, params.win_phase1) {}
+      window(index.maxGrainWidthSamples() / speedRatio, params.window) {}
 
 GrainSound::~GrainSound() {}
 bool GrainSound::appliesToNote(int) { return true; }
