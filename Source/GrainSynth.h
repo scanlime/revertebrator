@@ -8,10 +8,11 @@ class GrainSequence {
 public:
   struct Params {
     float selCenter, selMod, selSpread;
-    float speedWarp, pitchSpread;
+    float speedWarp, pitchSpread, pitchBendRange;
+    float gainDbLow, gainDbHigh;
   };
   struct Midi {
-    int midiNote, pitchWheel, modWheel;
+    int note, pitchWheel, modWheel;
     float velocity;
   };
   struct Point {
@@ -19,10 +20,11 @@ public:
     float gain;
   };
 
-  inline GrainSequence(const Params &p, const Midi &m) : params(p), midi(m) {}
-  inline ~GrainSequence() {}
+  GrainSequence(GrainIndex &index, const Params &p, const Midi &m);
+  ~GrainSequence();
   Point generate();
 
+  GrainIndex::Ptr index;
   Params params;
   Midi midi;
 

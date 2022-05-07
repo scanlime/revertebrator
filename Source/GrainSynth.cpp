@@ -1,7 +1,29 @@
 #include "GrainSynth.h"
 
+GrainSequence::GrainSequence(GrainIndex &index, const Params &p, const Midi &m)
+    : index(index), params(p), midi(m) {}
+
+GrainSequence::~GrainSequence() {}
+
 GrainSequence::Point GrainSequence::generate() {
-  return {grain : 0, gain : 1.0};
+  auto selNoise = params.selSpread * (prng() / double(prng.max()));
+  auto pitchNoise = params.pitchSpread * (prng() / double(prng.max()));
+
+  auto pitchBend = midi.pitchWheel / 8192.0 - 1.0;
+  auto modWheel = midi.modWheel / 64.0 - 1.0;
+
+  auto sel = params.selCenter + modWheel * params.selMod + selNoise;
+  auto sel01 = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
+
+  auto semitones = midi.note + params.pitchBendRange * pitchBend + pitchNoise;
+  auto hz = 440.0 * std::pow(2.0, (semitones - 69.0) / 12.0);
+
+  auto bin = index->closestBinForPitch(hz);
+  auto grains = index->grainsForBin(bin);
+  unsigned grain =
+      std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
+  auto gainDb = juce::jmap(midi.velocity, params.gainDbLow, params.gainDbHigh);
+  return {grain : grain, gain : juce::Decibels::decibelsToGain(gainDb)};
 }
 
 GrainSound::GrainSound(GrainIndex &index, const Params &params)
@@ -13,6 +35,7 @@ GrainSound::GrainSound(GrainIndex &index, const Params &params)
 GrainSound::~GrainSound() {}
 bool GrainSound::appliesToNote(int) { return true; }
 bool GrainSound::appliesToChannel(int) { return true; }
+
 GrainVoice::GrainVoice() {}
 GrainVoice::~GrainVoice() {}
 
@@ -24,15 +47,15 @@ void GrainVoice::startNote(int midiNote, float velocity,
                            juce::SynthesiserSound *sound,
                            int currentPitchWheelPosition) {
   GrainSequence::Midi midi = {
-      .midiNote = midiNote,
+      .note = midiNote,
       .pitchWheel = currentPitchWheelPosition,
       .modWheel = currentModWheelPosition,
       .velocity = velocity,
   };
   auto grainSound = dynamic_cast<GrainSound *>(sound);
   if (grainSound != nullptr) {
-    sequence =
-        std::make_unique<GrainSequence>(grainSound->params.sequence, midi);
+    sequence = std::make_unique<GrainSequence>(
+        *grainSound->index, grainSound->params.sequence, midi);
   }
 }
 

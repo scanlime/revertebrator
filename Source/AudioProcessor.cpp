@@ -136,6 +136,9 @@ void AudioProcessor::updateSoundFromState() {
              .speedWarp = state.getParameterAsValue("speed_warp").getValue(),
              .pitchSpread =
                  state.getParameterAsValue("pitch_spread").getValue(),
+             .pitchBendRange = 24,
+             .gainDbLow = -30,
+             .gainDbHigh = -5,
          }});
   }
 }
