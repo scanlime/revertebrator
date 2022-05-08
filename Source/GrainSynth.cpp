@@ -1,11 +1,6 @@
 #include "GrainSynth.h"
 
-GrainSequence::GrainSequence(GrainIndex &index, const Params &p, const Midi &m)
-    : index(index), params(p), midi(m) {}
-
-GrainSequence::~GrainSequence() {}
-
-GrainSequence::Point GrainSequence::generate() {
+GrainSequence::Point GrainSequence::generate(std::mt19937 &prng) {
   auto selNoise = params.selSpread * (prng() / double(prng.max()));
   auto pitchNoise = params.pitchSpread * (prng() / double(prng.max()));
 
@@ -26,11 +21,13 @@ GrainSequence::Point GrainSequence::generate() {
 }
 
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
+  std::mt19937 prng;
   for (auto i = 0; i < juce::numElementsInArray(lastModWheelValues); i++) {
     lastModWheelValues[i] = 64;
   }
   for (auto i = 0; i < numVoices; i++) {
-    addVoice(new GrainVoice(grainData));
+    unsigned seed = prng();
+    addVoice(new GrainVoice(grainData, std::mt19937(seed)));
   }
 }
 
@@ -91,10 +88,12 @@ GrainWaveform::Key GrainSound::waveformKeyForGrain(unsigned grain) const {
 }
 
 GrainSequence::Ptr GrainSound::grainSequence(const GrainSequence::Midi &midi) {
-  return std::make_unique<GrainSequence>(getIndex(), params.sequence, midi);
+  return std::make_unique<GrainSequence>(
+      GrainSequence{getIndex(), params.sequence, midi});
 }
 
-GrainVoice::GrainVoice(GrainData &grainData) : grainData(grainData) {}
+GrainVoice::GrainVoice(GrainData &grainData, const std::mt19937 &prng)
+    : grainData(grainData), prng(prng) {}
 GrainVoice::~GrainVoice() {}
 
 bool GrainVoice::canPlaySound(juce::SynthesiserSound *sound) {
@@ -140,9 +139,9 @@ void GrainVoice::renderNextBlock(juce::AudioBuffer<float> &outputBuffer,
   if (sound == nullptr) {
     return;
   }
+  auto prefetch = sound->windowSizeInSamples() * sound->grainRepeatsPerSample();
   while (numSamples > 0) {
-    fillQueueToDepth(1 + 2 * sound->windowSizeInSamples() *
-                             sound->grainRepeatsPerSample());
+    fillQueueToDepth(1 + prefetch);
     fetchQueueWaveforms();
     if (queue.empty()) {
       // No more work
@@ -154,54 +153,48 @@ void GrainVoice::renderNextBlock(juce::AudioBuffer<float> &outputBuffer,
     if (progress <= 0) {
       // Stalled momentarily waiting for data to load
       return;
+    } else {
+      advanceQueueBySamples(progress);
+      startSample += progress;
+      numSamples -= progress;
     }
-    startSample += progress;
-    numSamples -= progress;
   }
 }
 
 int GrainVoice::renderFromQueue(GrainSound &sound,
                                 juce::AudioBuffer<float> &outputBuffer,
                                 int startSample, int numSamples) {
-  int progress = 0;
-  auto repeatRate = sound.grainRepeatsPerSample();
 
-  // if (repeatRate > 0.) {
-  // tbd
-  // } else {
+  auto repeatRate = sound.grainRepeatsPerSample();
+  auto offset = sampleOffsetInQueue;
 
   for (auto &grain : queue) {
     if (grain.wave == nullptr) {
-      break;
+      return -1;
     }
     auto &wave = *grain.wave;
-    auto size =
-        std::min(numSamples, wave.buffer.getNumSamples() - sampleOffsetInQueue);
+    auto size = std::min(numSamples, wave.buffer.getNumSamples() - offset);
+    jassert(size > 0);
+
     for (int ch = 0; ch < outputBuffer.getNumChannels(); ch++) {
       outputBuffer.addFrom(ch, startSample, wave.buffer,
-                           ch % wave.buffer.getNumChannels(),
-                           sampleOffsetInQueue, size, grain.seq.gain);
+                           ch % wave.buffer.getNumChannels(), offset, size,
+                           grain.seq.gain);
     }
-    progress += size;
-    break;
-  }
 
-  sampleOffsetInQueue += progress;
-  while (!queue.empty() && queue.front().wave &&
-         sampleOffsetInQueue > queue.front().wave->buffer.getNumSamples()) {
-    sampleOffsetInQueue -= queue.front().wave->buffer.getNumSamples();
-    queue.pop_front();
+    if (repeatRate > 0.) {
+      auto samplesToNextGrain = int(std::ceil(1. / repeatRate));
+      return std::min(size, samplesToNextGrain);
+    } else {
+      return size;
+    }
   }
-
-  printf("rq %d-%d #%d +%d -> %d\n", startSample, numSamples, queue.size(),
-         sampleOffsetInQueue, progress);
-  return progress;
 }
 
 void GrainVoice::fillQueueToDepth(int numGrains) {
   if (sequence != nullptr) {
     while (queue.size() < numGrains) {
-      queue.push_back({sequence->generate()});
+      queue.push_back({sequence->generate(prng)});
     }
   }
 }
@@ -216,5 +209,21 @@ void GrainVoice::fetchQueueWaveforms() {
             sound->getIndex(), sound->waveformKeyForGrain(grain.seq.grain));
       }
     }
+  }
+}
+
+void GrainVoice::advanceQueueBySamples(int numSamples) {
+  sampleOffsetInQueue += numSamples;
+  while (!queue.empty()) {
+    auto &wave = queue.front().wave;
+    if (wave == nullptr) {
+      break;
+    }
+    auto len = wave->buffer.getNumSamples();
+    if (sampleOffsetInQueue < len) {
+      break;
+    }
+    sampleOffsetInQueue -= len;
+    queue.pop_front();
   }
 }

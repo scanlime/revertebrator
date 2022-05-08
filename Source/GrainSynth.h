@@ -4,8 +4,7 @@
 #include <JuceHeader.h>
 #include <random>
 
-class GrainSequence {
-public:
+struct GrainSequence {
   using Ptr = std::unique_ptr<GrainSequence>;
 
   struct Params {
@@ -22,17 +21,11 @@ public:
     float gain;
   };
 
-  GrainSequence(GrainIndex &index, const Params &p, const Midi &m);
-  ~GrainSequence();
-  Point generate();
-
   GrainIndex::Ptr index;
   Params params;
   Midi midi;
 
-private:
-  std::mt19937 prng;
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSequence)
+  Point generate(std::mt19937 &prng);
 };
 
 class GrainSound : public juce::SynthesiserSound {
@@ -64,7 +57,7 @@ private:
 
 class GrainVoice : public juce::SynthesiserVoice {
 public:
-  GrainVoice(GrainData &grainData);
+  GrainVoice(GrainData &grainData, const std::mt19937 &prng);
   ~GrainVoice() override;
 
   bool canPlaySound(juce::SynthesiserSound *) override;
@@ -83,8 +76,10 @@ private:
   void fillQueueToDepth(int numGrains);
   void fetchQueueWaveforms();
   int renderFromQueue(GrainSound &, juce::AudioBuffer<float> &, int, int);
+  void advanceQueueBySamples(int numSamples);
 
   GrainData &grainData;
+  std::mt19937 prng;
   std::unique_ptr<GrainSequence> sequence;
   std::deque<Grain> queue;
   int sampleOffsetInQueue{0};
