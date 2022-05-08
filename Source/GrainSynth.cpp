@@ -1,8 +1,9 @@
 #include "GrainSynth.h"
 
 GrainSequence::Point GrainSequence::generate(std::mt19937 &prng) {
-  auto selNoise = params.selSpread * (prng() / double(prng.max()));
-  auto pitchNoise = params.pitchSpread * (prng() / double(prng.max()));
+  std::uniform_real_distribution<> uniform(-1., 1.);
+  auto selNoise = params.selSpread * uniform(prng);
+  auto pitchNoise = params.pitchSpread * uniform(prng);
 
   auto pitchBend = midi.pitchWheel / 8192.0 - 1.0;
   auto modWheel = midi.modWheel / 64.0 - 1.0;

@@ -35,7 +35,7 @@ AudioProcessor::AudioProcessor()
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
              std::make_unique<juce::AudioParameterFloat>(
                  "pitch_spread", "P Spread",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
+                 juce::NormalisableRange<float>(0.0f, 8.0f), 0.0f)}),
       grainData(generalPurposeThreads), synth(grainData, 128) {
 
   constexpr auto width = 800;
