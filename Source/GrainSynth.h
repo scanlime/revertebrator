@@ -6,6 +6,8 @@
 
 class GrainSequence {
 public:
+  using Ptr = std::unique_ptr<GrainSequence>;
+
   struct Params {
     float selCenter, selMod, selSpread;
     float speedWarp, pitchSpread, pitchBendRange;
@@ -30,7 +32,6 @@ public:
 
 private:
   std::mt19937 prng;
-
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSequence)
 };
 
@@ -48,15 +49,16 @@ public:
   bool appliesToChannel(int) override;
 
   GrainIndex &getIndex();
-  GrainWaveform::Key waveformForGrain(unsigned grain);
-  std::unique_ptr<GrainSequence> grainSequence(const GrainSequence::Midi &);
+  double grainRepeatsPerSample() const;
+  int windowSizeInSamples() const;
+  GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
+  GrainSequence::Ptr grainSequence(const GrainSequence::Midi &);
 
 private:
   GrainIndex::Ptr index;
   Params params;
   float speedRatio;
   GrainWaveform::Window window;
-
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSound)
 };
 
@@ -73,14 +75,20 @@ public:
   void renderNextBlock(juce::AudioBuffer<float> &, int, int) override;
 
 private:
+  struct Grain {
+    GrainSequence::Point seq;
+    GrainWaveform::Ptr wave;
+  };
+
+  void fillQueueToDepth(int numGrains);
+  void fetchQueueWaveforms();
+  int renderFromQueue(GrainSound &, juce::AudioBuffer<float> &, int, int);
+
   GrainData &grainData;
   std::unique_ptr<GrainSequence> sequence;
-  std::deque<GrainSequence::Point> queue;
-  int temp_sample{0};
-  float temp_gain{0.f};
-  GrainWaveform::Ptr temp_wave;
+  std::deque<Grain> queue;
+  int sampleOffsetInQueue{0};
   int currentModWheelPosition{0};
-
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainVoice)
 };
 
@@ -96,6 +104,5 @@ public:
 
 private:
   int lastModWheelValues[16];
-
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSynth)
 };
