@@ -47,8 +47,11 @@ public:
   bool appliesToNote(int) override;
   bool appliesToChannel(int) override;
 
+  GrainIndex &getIndex();
+  GrainWaveform::Key waveformForGrain(unsigned grain);
+  std::unique_ptr<GrainSequence> grainSequence(const GrainSequence::Midi &);
+
 private:
-  friend class GrainVoice;
   GrainIndex::Ptr index;
   Params params;
   float speedRatio;
@@ -59,7 +62,7 @@ private:
 
 class GrainVoice : public juce::SynthesiserVoice {
 public:
-  GrainVoice();
+  GrainVoice(GrainData &grainData);
   ~GrainVoice() override;
 
   bool canPlaySound(juce::SynthesiserSound *) override;
@@ -70,8 +73,12 @@ public:
   void renderNextBlock(juce::AudioBuffer<float> &, int, int) override;
 
 private:
+  GrainData &grainData;
   std::unique_ptr<GrainSequence> sequence;
   std::deque<GrainSequence::Point> queue;
+  int temp_sample{0};
+  float temp_gain{0.f};
+  GrainWaveform::Ptr temp_wave;
   int currentModWheelPosition{0};
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainVoice)
@@ -79,7 +86,7 @@ private:
 
 class GrainSynth : public juce::Synthesiser {
 public:
-  GrainSynth(int numVoices);
+  GrainSynth(GrainData &grainData, int numVoices);
   ~GrainSynth() override;
 
   void changeSound(GrainIndex &, const GrainSound::Params &);

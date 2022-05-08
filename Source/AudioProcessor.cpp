@@ -23,7 +23,7 @@ AudioProcessor::AudioProcessor()
                  juce::NormalisableRange<float>(0.01f, 100.0f), 10.f),
              std::make_unique<juce::AudioParameterFloat>(
                  "speed_warp", "Spd Warp",
-                 juce::NormalisableRange<float>(0.1f, 4.f), 1.f),
+                 juce::NormalisableRange<float>(0.1f, 3.0f), 1.f),
              std::make_unique<juce::AudioParameterFloat>(
                  "sel_center", "Sel",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
@@ -36,7 +36,7 @@ AudioProcessor::AudioProcessor()
              std::make_unique<juce::AudioParameterFloat>(
                  "pitch_spread", "P Spread",
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f)}),
-      grainData(generalPurposeThreads), synth(128) {
+      grainData(generalPurposeThreads), synth(grainData, 128) {
 
   constexpr auto width = 800;
   constexpr auto height = 400;

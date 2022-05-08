@@ -11,6 +11,7 @@ GrainSequence::Point GrainSequence::generate() {
 
   auto pitchBend = midi.pitchWheel / 8192.0 - 1.0;
   auto modWheel = midi.modWheel / 64.0 - 1.0;
+  auto gainDb = juce::jmap(midi.velocity, params.gainDbLow, params.gainDbHigh);
 
   auto sel = params.selCenter + modWheel * params.selMod + selNoise;
   auto sel01 = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
@@ -18,12 +19,10 @@ GrainSequence::Point GrainSequence::generate() {
   auto semitones = midi.note + params.pitchBendRange * pitchBend + pitchNoise;
   auto hz = 440.0 * std::pow(2.0, (semitones - 69.0) / 12.0);
 
-  auto bin = index->closestBinForPitch(hz);
+  auto bin = index->closestBinForPitch(hz / params.speedWarp);
   auto grains = index->grainsForBin(bin);
-  unsigned grain =
-      std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
-  auto gainDb = juce::jmap(midi.velocity, params.gainDbLow, params.gainDbHigh);
-  return {grain : grain, gain : juce::Decibels::decibelsToGain(gainDb)};
+  unsigned g = std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
+  return {grain : g, gain : juce::Decibels::decibelsToGain(gainDb)};
 }
 
 GrainSound::GrainSound(GrainIndex &index, const Params &params)
@@ -35,8 +34,22 @@ GrainSound::GrainSound(GrainIndex &index, const Params &params)
 GrainSound::~GrainSound() {}
 bool GrainSound::appliesToNote(int) { return true; }
 bool GrainSound::appliesToChannel(int) { return true; }
+GrainIndex &GrainSound::getIndex() { return *index; }
 
-GrainVoice::GrainVoice() {}
+GrainWaveform::Key GrainSound::waveformForGrain(unsigned grain) {
+  return {
+      .grain = grain,
+      .speedRatio = speedRatio,
+      .window = window,
+  };
+}
+
+std::unique_ptr<GrainSequence>
+GrainSound::grainSequence(const GrainSequence::Midi &midi) {
+  return std::make_unique<GrainSequence>(getIndex(), params.sequence, midi);
+}
+
+GrainVoice::GrainVoice(GrainData &grainData) : grainData(grainData) {}
 GrainVoice::~GrainVoice() {}
 
 bool GrainVoice::canPlaySound(juce::SynthesiserSound *sound) {
@@ -44,7 +57,7 @@ bool GrainVoice::canPlaySound(juce::SynthesiserSound *sound) {
 }
 
 void GrainVoice::startNote(int midiNote, float velocity,
-                           juce::SynthesiserSound *sound,
+                           juce::SynthesiserSound *genericSound,
                            int currentPitchWheelPosition) {
   GrainSequence::Midi midi = {
       .note = midiNote,
@@ -52,14 +65,20 @@ void GrainVoice::startNote(int midiNote, float velocity,
       .modWheel = currentModWheelPosition,
       .velocity = velocity,
   };
-  auto grainSound = dynamic_cast<GrainSound *>(sound);
-  if (grainSound != nullptr) {
-    sequence = std::make_unique<GrainSequence>(
-        *grainSound->index, grainSound->params.sequence, midi);
+  auto sound = dynamic_cast<GrainSound *>(genericSound);
+
+  if (sound != nullptr) {
+    sequence = sound->grainSequence(midi);
+    queue.clear();
+    temp_sample = 0;
+    temp_wave = nullptr;
   }
 }
 
-void GrainVoice::stopNote(float, bool) { sequence = nullptr; }
+void GrainVoice::stopNote(float, bool) {
+  sequence = nullptr;
+  queue.clear();
+}
 
 void GrainVoice::pitchWheelMoved(int newValue) {
   if (sequence != nullptr) {
@@ -78,20 +97,51 @@ void GrainVoice::controllerMoved(int controllerNumber, int newValue) {
 
 void GrainVoice::renderNextBlock(juce::AudioBuffer<float> &outputBuffer,
                                  int startSample, int numSamples) {
-  if (sequence != nullptr) {
-    auto p = sequence->generate();
-    printf("render %p %d %d - %f %d %d - %d %f\n", this, startSample,
-           numSamples, sequence->params.speedWarp, sequence->midi.modWheel,
-           sequence->midi.pitchWheel, p.grain, p.gain);
+  auto genericSound = getCurrentlyPlayingSound();
+  auto sound = dynamic_cast<GrainSound *>(genericSound.get());
+  if (sequence == nullptr || sound == nullptr) {
+    return;
+  }
+
+  while (queue.size() < 4) {
+    queue.push_back(sequence->generate());
+  }
+  for (auto point : queue) {
+    grainData.getWaveform(sound->getIndex(),
+                          sound->waveformForGrain(point.grain));
+  }
+  if (temp_wave == nullptr) {
+    GrainWaveform::Ptr next = grainData.getWaveform(
+        sound->getIndex(), sound->waveformForGrain(queue.front().grain));
+    if (next) {
+      temp_wave = next;
+      temp_sample = 0;
+      temp_gain = queue.front().gain;
+    }
+    queue.pop_front();
+  }
+  if (temp_wave != nullptr) {
+    auto size =
+        std::min(numSamples, temp_wave->buffer.getNumSamples() - temp_sample);
+
+    for (int ch = 0; ch < outputBuffer.getNumChannels(); ch++) {
+      outputBuffer.addFrom(ch, startSample, temp_wave->buffer,
+                           ch % temp_wave->buffer.getNumChannels(), temp_sample,
+                           size, temp_gain);
+    }
+    temp_sample += size;
+    if (temp_sample >= temp_wave->buffer.getNumSamples()) {
+      temp_wave = nullptr;
+    }
   }
 }
 
-GrainSynth::GrainSynth(int numVoices) {
+GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
   for (auto i = 0; i < 16; i++) {
     lastModWheelValues[i] = 64;
   }
   for (auto i = 0; i < numVoices; i++) {
-    addVoice(new GrainVoice());
+    addVoice(new GrainVoice(grainData));
   }
 }
 
