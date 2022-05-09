@@ -77,6 +77,9 @@ private:
   void fillQueueForSound(const GrainSound &);
   void fetchQueueWaveforms(GrainSound &);
   int numActiveGrainsInQueue(const GrainSound &);
+  void addToGrainReservoir(const Grain &);
+  bool replaceWithGrainFromReservoir(Grain &);
+  int randomReservoirSlot();
   void renderFromQueue(const GrainSound &, juce::AudioBuffer<float> &, int,
                        int);
 
@@ -84,6 +87,7 @@ private:
   std::mt19937 prng;
   std::unique_ptr<GrainSequence> sequence;
   std::deque<Grain> queue;
+  std::vector<Grain> reservoir;
   int sampleOffsetInQueue{0};
   int currentModWheelPosition{0};
 

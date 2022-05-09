@@ -113,6 +113,7 @@ void GrainVoice::startNote(int midiNote, float velocity,
     });
     sampleOffsetInQueue = 0;
     queue.clear();
+    reservoir.clear();
     fillQueueForSound(*sound);
     fetchQueueWaveforms(*sound);
   }
@@ -211,6 +212,31 @@ int GrainVoice::numActiveGrainsInQueue(const GrainSound &sound) {
   return numActive;
 }
 
+int GrainVoice::randomReservoirSlot() {
+  std::uniform_int_distribution<> uniform(0, reservoir.size() - 1);
+  return uniform(prng);
+}
+
+void GrainVoice::addToGrainReservoir(const Grain &grain) {
+  constexpr int maxReservoirGrains = 64;
+  jassert(grain.wave != nullptr);
+  if (reservoir.size() < maxReservoirGrains) {
+    reservoir.push_back(grain);
+  } else {
+    jassert(reservoir.size() == maxReservoirGrains);
+    reservoir[randomReservoirSlot()] = grain;
+  }
+}
+
+bool GrainVoice::replaceWithGrainFromReservoir(Grain &out) {
+  if (reservoir.size() > 0) {
+    out = reservoir[randomReservoirSlot()];
+    return true;
+  } else {
+    return false;
+  }
+}
+
 void GrainVoice::renderFromQueue(const GrainSound &sound,
                                  juce::AudioBuffer<float> &outputBuffer,
                                  int startSample, int numSamples) {
@@ -219,13 +245,15 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
     int queueTimestamp = 0;
     for (auto &grain : queue) {
       if (grain.wave == nullptr) {
-        if (queueTimestamp == 0) {
-          // Add some latency until the first grain is loaded
+        // The grain we need isn't available yet; try a replacement
+        if (replaceWithGrainFromReservoir(grain)) {
+          jassert(grain.wave != nullptr);
+        } else {
+          // Just try to stall without advancing the queue. This will be
+          // harmless if we are just starting, but if it happens later
+          // there will be audio glitches as we repeat a frame.
           return;
         }
-        printf("Queue stalled! Voice %p, timestamp %d, size %d\n", this,
-               queueTimestamp, queue.size());
-        return;
       }
       if (queueTimestamp > (sampleOffsetInQueue + numSamples)) {
         // Happens after the end of this render block
@@ -267,11 +295,14 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
       // Still using this grain
       break;
     }
+    // Done with the grain
     int queueTimestamp = 0;
     if (timestampForNextRepeat(queueTimestamp, repeatRate)) {
       sampleOffsetInQueue -= queueTimestamp;
+      addToGrainReservoir(queue.front());
       queue.pop_front();
     } else {
+      // No repeats, we're entirely done
       queue.clear();
     }
   }
