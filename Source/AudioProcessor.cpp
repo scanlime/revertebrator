@@ -79,7 +79,10 @@ bool AudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const {
 void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
                                   juce::MidiBuffer &midiMessages) {
   buffer.clear();
-  synth.renderNextBlock(buffer, midiMessages, 0, buffer.getNumSamples());
+  auto startSample = 0;
+  auto numSamples = buffer.getNumSamples();
+  midiState.processNextMidiBuffer(midiMessages, startSample, numSamples, true);
+  synth.renderNextBlock(buffer, midiMessages, startSample, numSamples);
 }
 
 juce::AudioProcessorEditor *AudioProcessor::createEditor() {

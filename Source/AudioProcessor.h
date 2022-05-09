@@ -38,6 +38,7 @@ public:
   void setStateInformation(const void *data, int sizeInBytes) override;
 
   juce::AudioProcessorValueTreeState state;
+  juce::MidiKeyboardState midiState;
   juce::ThreadPool generalPurposeThreads{2};
   GrainData grainData;
 

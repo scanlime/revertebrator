@@ -132,8 +132,12 @@ struct AudioProcessorEditor::Parts {
   MapPanel map;
   WindowPanel window;
   ParamPanel params;
+  juce::MidiKeyboardComponent keyboard;
 
-  Parts(AudioProcessor &p) : data(p), map(p), window(p), params(p) {}
+  Parts(AudioProcessor &p)
+      : data(p), map(p), window(p), params(p),
+        keyboard(p.midiState, juce::MidiKeyboardComponent::horizontalKeyboard) {
+  }
 };
 
 AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
@@ -142,6 +146,7 @@ AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
   addAndMakeVisible(parts->map);
   addAndMakeVisible(parts->window);
   addAndMakeVisible(parts->params);
+  addAndMakeVisible(parts->keyboard);
 
   auto state = p.state.state.getChildWithName("editor_window");
   savedWidth.referTo(state.getPropertyAsValue("width", nullptr));
@@ -162,7 +167,8 @@ void AudioProcessorEditor::resized() {
   FlexBox box;
   box.flexDirection = FlexBox::Direction::column;
   box.items.add(FlexItem(parts->data).withMinHeight(48));
-  box.items.add(FlexItem(parts->map).withFlex(4));
+  box.items.add(FlexItem(parts->keyboard).withFlex(1));
+  box.items.add(FlexItem(parts->map).withFlex(3));
   box.items.add(FlexItem(parts->window).withFlex(1));
   box.items.add(FlexItem(parts->params).withMinHeight(100));
   box.performLayout(getLocalBounds().toFloat());
