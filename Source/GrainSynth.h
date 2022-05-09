@@ -43,15 +43,16 @@ public:
 
   GrainIndex &getIndex();
   double grainRepeatsPerSample() const;
-  int windowSizeInSamples() const;
+  double grainRepeatsPerSecond() const;
   GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
-  GrainSequence::Ptr grainSequence(const GrainSequence::Midi &);
+  GrainSequence::Ptr grainSequence(const GrainSequence::Midi &midi);
 
 private:
   GrainIndex::Ptr index;
   Params params;
   float speedRatio;
   GrainWaveform::Window window;
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSound)
 };
 
@@ -74,9 +75,11 @@ private:
   };
 
   void fillQueueToDepth(int numGrains);
-  void fetchQueueWaveforms();
-  int renderFromQueue(GrainSound &, juce::AudioBuffer<float> &, int, int);
-  void advanceQueueBySamples(int numSamples);
+  void fillQueueToPreloadSound(const GrainSound &);
+  void fetchQueueWaveforms(GrainSound &);
+  int numActiveGrainsInQueue(const GrainSound &);
+  void renderFromQueue(const GrainSound &, juce::AudioBuffer<float> &, int,
+                       int);
 
   GrainData &grainData;
   std::mt19937 prng;
@@ -84,6 +87,7 @@ private:
   std::deque<Grain> queue;
   int sampleOffsetInQueue{0};
   int currentModWheelPosition{0};
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainVoice)
 };
 
@@ -99,5 +103,6 @@ public:
 
 private:
   int lastModWheelValues[16];
+
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSynth)
 };
