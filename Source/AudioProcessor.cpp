@@ -20,7 +20,7 @@ AudioProcessor::AudioProcessor()
                  juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
              std::make_unique<juce::AudioParameterFloat>(
                  "grain_rate", "Gr Rate",
-                 juce::NormalisableRange<float>(0.0f, 100.0f), 10.f),
+                 juce::NormalisableRange<float>(0.0f, 200.0f), 10.f),
              std::make_unique<juce::AudioParameterFloat>(
                  "speed_warp", "Spd Warp",
                  juce::NormalisableRange<float>(0.1f, 3.0f), 1.f),
