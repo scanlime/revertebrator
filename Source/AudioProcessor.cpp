@@ -137,8 +137,8 @@ void AudioProcessor::updateSoundFromState() {
              .pitchSpread =
                  state.getParameterAsValue("pitch_spread").getValue(),
              .pitchBendRange = 12,
-             .gainDbLow = -40,
-             .gainDbHigh = -10,
+             .gainDbLow = -50,
+             .gainDbHigh = -25,
          }});
   }
 }
