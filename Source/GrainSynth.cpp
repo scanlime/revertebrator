@@ -22,13 +22,12 @@ GrainSequence::Point GrainSequence::generate(std::mt19937 &prng) {
 }
 
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
-  std::mt19937 prng;
+  std::mt19937 seedGenerator;
   for (auto i = 0; i < juce::numElementsInArray(lastModWheelValues); i++) {
     lastModWheelValues[i] = 64;
   }
   for (auto i = 0; i < numVoices; i++) {
-    unsigned seed = prng();
-    addVoice(new GrainVoice(grainData, std::mt19937(seed)));
+    addVoice(new GrainVoice(grainData, std::mt19937(seedGenerator())));
   }
 }
 
@@ -72,10 +71,12 @@ bool GrainSound::appliesToNote(int) { return true; }
 bool GrainSound::appliesToChannel(int) { return true; }
 GrainIndex &GrainSound::getIndex() { return *index; }
 
-double GrainSound::grainRepeatsPerSecond() const { return params.grainRate; }
-
 double GrainSound::grainRepeatsPerSample() const {
   return params.grainRate / params.sampleRate;
+}
+
+int GrainSound::targetQueueDepth() const {
+  return std::ceil(1. + window.range().getLength() * grainRepeatsPerSample());
 }
 
 GrainWaveform::Key GrainSound::waveformKeyForGrain(unsigned grain) const {
@@ -112,7 +113,7 @@ void GrainVoice::startNote(int midiNote, float velocity,
     });
     sampleOffsetInQueue = 0;
     queue.clear();
-    fillQueueToPreloadSound(*sound);
+    fillQueueForSound(*sound);
     fetchQueueWaveforms(*sound);
   }
 }
@@ -148,7 +149,7 @@ void GrainVoice::renderNextBlock(juce::AudioBuffer<float> &outputBuffer,
   if (sound == nullptr) {
     return;
   }
-  fillQueueToPreloadSound(*sound);
+  fillQueueForSound(*sound);
   fetchQueueWaveforms(*sound);
   if (queue.empty()) {
     // No more work
@@ -158,15 +159,10 @@ void GrainVoice::renderNextBlock(juce::AudioBuffer<float> &outputBuffer,
   }
 }
 
-void GrainVoice::fillQueueToPreloadSound(const GrainSound &sound) {
-  auto preloadSeconds = 1.;
-  auto preloadGrains = 1. + sound.grainRepeatsPerSecond() * preloadSeconds;
-  fillQueueToDepth(std::ceil(preloadGrains));
-}
-
-void GrainVoice::fillQueueToDepth(int numGrains) {
+void GrainVoice::fillQueueForSound(const GrainSound &sound) {
   if (sequence != nullptr) {
-    while (queue.size() < numGrains) {
+    int target = sound.targetQueueDepth();
+    while (queue.size() < target) {
       queue.push_back({sequence->generate(prng)});
     }
   }
@@ -223,7 +219,12 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
     int queueTimestamp = 0;
     for (auto &grain : queue) {
       if (grain.wave == nullptr) {
-        // Stalled while we load grains, leave without advancing the queue
+        if (queueTimestamp == 0) {
+          // Add some latency until the first grain is loaded
+          return;
+        }
+        printf("Queue stalled! Voice %p, timestamp %d, size %d\n", this,
+               queueTimestamp, queue.size());
         return;
       }
       if (queueTimestamp > (sampleOffsetInQueue + numSamples)) {
@@ -237,7 +238,8 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
       auto inChannels = wave.buffer.getNumChannels();
       auto outChannels = outputBuffer.getNumChannels();
 
-      // Figure out where this grain goes relative to the block we are rendering
+      // Figure out where this grain goes relative to the block we are
+      // rendering
       auto relative = queueTimestamp - sampleOffsetInQueue;
       auto copySource = std::max<int>(0, -relative);
       auto copyDest = std::max<int>(0, relative);

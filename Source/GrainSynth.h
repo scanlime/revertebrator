@@ -43,7 +43,7 @@ public:
 
   GrainIndex &getIndex();
   double grainRepeatsPerSample() const;
-  double grainRepeatsPerSecond() const;
+  int targetQueueDepth() const;
   GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
   GrainSequence::Ptr grainSequence(const GrainSequence::Midi &midi);
 
@@ -74,8 +74,7 @@ private:
     GrainWaveform::Ptr wave;
   };
 
-  void fillQueueToDepth(int numGrains);
-  void fillQueueToPreloadSound(const GrainSound &);
+  void fillQueueForSound(const GrainSound &);
   void fetchQueueWaveforms(GrainSound &);
   int numActiveGrainsInQueue(const GrainSound &);
   void renderFromQueue(const GrainSound &, juce::AudioBuffer<float> &, int,
