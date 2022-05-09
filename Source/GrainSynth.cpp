@@ -124,8 +124,10 @@ void GrainVoice::stopNote(float, bool) {
   auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
   if (sound == nullptr) {
     queue.clear();
-  } else {
-    queue.resize(numActiveGrainsInQueue(*sound));
+  } else if (queue.size() > 1) {
+    // Truncate off grains that haven't started playing, leaving
+    // only grains that have started and/or the first grain of the sequence.
+    queue.resize(std::max(1, numActiveGrainsInQueue(*sound)));
   }
 }
 
