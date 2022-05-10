@@ -148,6 +148,8 @@ AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
   addAndMakeVisible(parts->params);
   addAndMakeVisible(parts->keyboard);
 
+  parts->keyboard.setKeyPressBaseOctave(4);
+
   auto state = p.state.state.getChildWithName("editor_window");
   savedWidth.referTo(state.getPropertyAsValue("width", nullptr));
   savedHeight.referTo(state.getPropertyAsValue("height", nullptr));
