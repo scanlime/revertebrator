@@ -1,10 +1,10 @@
-#include "AudioProcessorEditor.h"
+#include "RvvEditor.h"
 #include "MapPanel.h"
-#include "WindowPanel.h"
+#include "WavePanel.h"
 
 class ParamPanel : public juce::Component {
 public:
-  ParamPanel(AudioProcessor &p) {
+  ParamPanel(RvvProcessor &p) {
     using juce::Label;
     using juce::Slider;
 
@@ -65,7 +65,7 @@ class DataPanel : public juce::Component,
                   private juce::FilenameComponentListener,
                   private juce::Value::Listener {
 public:
-  DataPanel(AudioProcessor &p) {
+  DataPanel(RvvProcessor &p) {
     recentItems = p.state.state.getChildWithName("recent_files");
     juce::StringArray recentStrings;
     for (auto item : recentItems) {
@@ -127,24 +127,25 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DataPanel)
 };
 
-struct AudioProcessorEditor::Parts {
+struct RvvEditor::Parts {
   DataPanel data;
   MapPanel map;
-  WindowPanel window;
+  WavePanel wave;
   ParamPanel params;
   juce::MidiKeyboardComponent keyboard;
 
-  Parts(AudioProcessor &p)
-      : data(p), map(p), window(p), params(p),
+  Parts(RvvProcessor &p)
+      : data(p), map(p), wave(p), params(p),
         keyboard(p.midiState, juce::MidiKeyboardComponent::horizontalKeyboard) {
   }
 };
 
-AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
+RvvEditor::RvvEditor(RvvProcessor &p)
     : juce::AudioProcessorEditor(&p), parts(std::make_unique<Parts>(p)) {
+
   addAndMakeVisible(parts->data);
   addAndMakeVisible(parts->map);
-  addAndMakeVisible(parts->window);
+  addAndMakeVisible(parts->wave);
   addAndMakeVisible(parts->params);
   addAndMakeVisible(parts->keyboard);
 
@@ -158,13 +159,13 @@ AudioProcessorEditor::AudioProcessorEditor(AudioProcessor &p)
   setResizable(true, true);
 }
 
-AudioProcessorEditor::~AudioProcessorEditor() {}
+RvvEditor::~RvvEditor() {}
 
-void AudioProcessorEditor::paint(juce::Graphics &g) {
+void RvvEditor::paint(juce::Graphics &g) {
   g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
 }
 
-void AudioProcessorEditor::resized() {
+void RvvEditor::resized() {
   using juce::FlexBox;
   using juce::FlexItem;
   FlexBox box;
@@ -172,7 +173,7 @@ void AudioProcessorEditor::resized() {
   box.items.add(FlexItem(parts->data).withMinHeight(48));
   box.items.add(FlexItem(parts->keyboard).withFlex(1));
   box.items.add(FlexItem(parts->map).withFlex(3));
-  box.items.add(FlexItem(parts->window).withFlex(1));
+  box.items.add(FlexItem(parts->wave).withFlex(1));
   box.items.add(FlexItem(parts->params).withMinHeight(100));
   box.performLayout(getLocalBounds().toFloat());
   savedWidth = getWidth();

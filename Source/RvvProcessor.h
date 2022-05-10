@@ -4,12 +4,12 @@
 #include "GrainSynth.h"
 #include <JuceHeader.h>
 
-class AudioProcessor : public juce::AudioProcessor,
-                       private juce::ValueTree::Listener,
-                       private juce::Value::Listener {
+class RvvProcessor : public juce::AudioProcessor,
+                     private juce::ValueTree::Listener,
+                     private juce::Value::Listener {
 public:
-  AudioProcessor();
-  ~AudioProcessor() override;
+  RvvProcessor();
+  ~RvvProcessor() override;
 
   void prepareToPlay(double sampleRate, int samplesPerBlock) override;
   void releaseResources() override;
@@ -52,5 +52,5 @@ private:
   GrainSynth synth;
   juce::Value grainDataStatus;
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioProcessor)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RvvProcessor)
 };

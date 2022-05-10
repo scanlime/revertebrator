@@ -1,13 +1,13 @@
 #pragma once
 
-#include "AudioProcessor.h"
+#include "RvvProcessor.h"
 #include <JuceHeader.h>
 
 class MapPanel : public juce::Component,
                  private juce::Value::Listener,
                  private juce::ChangeListener {
 public:
-  MapPanel(AudioProcessor &);
+  MapPanel(RvvProcessor &);
   ~MapPanel() override;
 
   void paint(juce::Graphics &) override;
@@ -17,7 +17,7 @@ private:
   class Layout;
   class ImageRender;
 
-  AudioProcessor &audioProcessor;
+  RvvProcessor &processor;
   std::unique_ptr<ImageRender> image;
   juce::Value grainDataStatus;
 

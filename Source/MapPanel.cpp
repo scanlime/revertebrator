@@ -183,11 +183,10 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImageRender)
 };
 
-MapPanel::MapPanel(AudioProcessor &audioProcessor)
-    : audioProcessor(audioProcessor),
-      image(
-          std::make_unique<ImageRender>(audioProcessor.generalPurposeThreads)) {
-  audioProcessor.grainData.referToStatusOutput(grainDataStatus);
+MapPanel::MapPanel(RvvProcessor &processor)
+    : processor(processor),
+      image(std::make_unique<ImageRender>(processor.generalPurposeThreads)) {
+  processor.grainData.referToStatusOutput(grainDataStatus);
   grainDataStatus.addListener(this);
   image->addChangeListener(this);
 }
@@ -204,7 +203,7 @@ void MapPanel::valueChanged(juce::Value &) { requestNewImage(); }
 
 void MapPanel::requestNewImage() {
   image->requestChange(ImageRender::Request{
-      .index = audioProcessor.grainData.getIndex(),
+      .index = processor.grainData.getIndex(),
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
   });

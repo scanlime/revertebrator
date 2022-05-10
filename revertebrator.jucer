@@ -6,22 +6,19 @@
               pluginCode="Rvtb" pluginManufacturerCode="Scan" aaxIdentifier="org.scanlime.revertebrator">
   <MAINGROUP id="lItzvD" name="Revertebrator">
     <GROUP id="{12CE519E-20B2-3A65-045F-BA8855B861A7}" name="Source">
-      <FILE id="UjjuZ9" name="AudioProcessor.cpp" compile="1" resource="0"
-            file="Source/AudioProcessor.cpp"/>
-      <FILE id="qbbXik" name="AudioProcessor.h" compile="0" resource="0"
-            file="Source/AudioProcessor.h"/>
-      <FILE id="IsvdE3" name="AudioProcessorEditor.cpp" compile="1" resource="0"
-            file="Source/AudioProcessorEditor.cpp"/>
-      <FILE id="tubDD4" name="AudioProcessorEditor.h" compile="0" resource="0"
-            file="Source/AudioProcessorEditor.h"/>
+      <FILE id="UjjuZ9" name="RvvProcessor.cpp" compile="1" resource="0"
+            file="Source/RvvProcessor.cpp"/>
+      <FILE id="qbbXik" name="RvvProcessor.h" compile="0" resource="0" file="Source/RvvProcessor.h"/>
+      <FILE id="IsvdE3" name="RvvEditor.cpp" compile="1" resource="0" file="Source/RvvEditor.cpp"/>
+      <FILE id="tubDD4" name="RvvEditor.h" compile="0" resource="0" file="Source/RvvEditor.h"/>
       <FILE id="Fb4khv" name="GrainData.cpp" compile="1" resource="0" file="Source/GrainData.cpp"/>
       <FILE id="P7Hgku" name="GrainData.h" compile="0" resource="0" file="Source/GrainData.h"/>
       <FILE id="f4s1SD" name="GrainSynth.cpp" compile="1" resource="0" file="Source/GrainSynth.cpp"/>
       <FILE id="w6lOnk" name="GrainSynth.h" compile="0" resource="0" file="Source/GrainSynth.h"/>
       <FILE id="nZrn6R" name="MapPanel.cpp" compile="1" resource="0" file="Source/MapPanel.cpp"/>
       <FILE id="OUOI2n" name="MapPanel.h" compile="0" resource="0" file="Source/MapPanel.h"/>
-      <FILE id="sJekXR" name="WindowPanel.cpp" compile="1" resource="0" file="Source/WindowPanel.cpp"/>
-      <FILE id="wPXm6u" name="WindowPanel.h" compile="0" resource="0" file="Source/WindowPanel.h"/>
+      <FILE id="sJekXR" name="WavePanel.cpp" compile="1" resource="0" file="Source/WavePanel.cpp"/>
+      <FILE id="wPXm6u" name="WavePanel.h" compile="0" resource="0" file="Source/WavePanel.h"/>
       <FILE id="obS4Pg" name="ZipReader64.h" compile="0" resource="0" file="Source/ZipReader64.h"/>
     </GROUP>
   </MAINGROUP>

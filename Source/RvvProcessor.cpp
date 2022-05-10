@@ -1,8 +1,8 @@
-#include "AudioProcessor.h"
-#include "AudioProcessorEditor.h"
+#include "RvvProcessor.h"
 #include "GrainSynth.h"
+#include "RvvEditor.h"
 
-AudioProcessor::AudioProcessor()
+RvvProcessor::RvvProcessor()
     : juce::AudioProcessor(BusesProperties().withOutput(
           "Output", juce::AudioChannelSet::stereo())),
       state(*this, nullptr, "state",
@@ -50,34 +50,34 @@ AudioProcessor::AudioProcessor()
   grainDataStatus.addListener(this);
 }
 
-AudioProcessor::~AudioProcessor() {}
-const juce::String AudioProcessor::getName() const { return JucePlugin_Name; }
-bool AudioProcessor::hasEditor() const { return true; }
-bool AudioProcessor::acceptsMidi() const { return true; }
-bool AudioProcessor::producesMidi() const { return false; }
-bool AudioProcessor::isMidiEffect() const { return false; }
-double AudioProcessor::getTailLengthSeconds() const { return 0.0; }
-int AudioProcessor::getNumPrograms() { return 1; }
-int AudioProcessor::getCurrentProgram() { return 0; }
-void AudioProcessor::setCurrentProgram(int index) {}
-const juce::String AudioProcessor::getProgramName(int index) { return {}; }
-void AudioProcessor::changeProgramName(int index, const juce::String &name) {}
-void AudioProcessor::releaseResources() {}
+RvvProcessor::~RvvProcessor() {}
+const juce::String RvvProcessor::getName() const { return JucePlugin_Name; }
+bool RvvProcessor::hasEditor() const { return true; }
+bool RvvProcessor::acceptsMidi() const { return true; }
+bool RvvProcessor::producesMidi() const { return false; }
+bool RvvProcessor::isMidiEffect() const { return false; }
+double RvvProcessor::getTailLengthSeconds() const { return 0.0; }
+int RvvProcessor::getNumPrograms() { return 1; }
+int RvvProcessor::getCurrentProgram() { return 0; }
+void RvvProcessor::setCurrentProgram(int index) {}
+const juce::String RvvProcessor::getProgramName(int index) { return {}; }
+void RvvProcessor::changeProgramName(int index, const juce::String &name) {}
+void RvvProcessor::releaseResources() {}
 
-void AudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
+void RvvProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   synth.setCurrentPlaybackSampleRate(sampleRate);
   updateSoundFromState();
 }
 
-bool AudioProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const {
+bool RvvProcessor::isBusesLayoutSupported(const BusesLayout &layouts) const {
   if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
       layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
     return false;
   return true;
 }
 
-void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
-                                  juce::MidiBuffer &midiMessages) {
+void RvvProcessor::processBlock(juce::AudioBuffer<float> &buffer,
+                                juce::MidiBuffer &midiMessages) {
   buffer.clear();
   auto startSample = 0;
   auto numSamples = buffer.getNumSamples();
@@ -85,40 +85,40 @@ void AudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   synth.renderNextBlock(buffer, midiMessages, startSample, numSamples);
 }
 
-juce::AudioProcessorEditor *AudioProcessor::createEditor() {
-  return new AudioProcessorEditor(*this);
+juce::AudioProcessorEditor *RvvProcessor::createEditor() {
+  return new RvvEditor(*this);
 }
 
-void AudioProcessor::getStateInformation(juce::MemoryBlock &destData) {
+void RvvProcessor::getStateInformation(juce::MemoryBlock &destData) {
   if (auto xml = state.copyState().createXml())
     copyXmlToBinary(*xml, destData);
 }
 
-void AudioProcessor::setStateInformation(const void *data, int sizeInBytes) {
+void RvvProcessor::setStateInformation(const void *data, int sizeInBytes) {
   if (auto xml = getXmlFromBinary(data, sizeInBytes))
     state.replaceState(juce::ValueTree::fromXml(*xml));
   attachToState();
   updateSoundFromState();
 }
 
-void AudioProcessor::valueTreePropertyChanged(juce::ValueTree &,
-                                              const juce::Identifier &) {
+void RvvProcessor::valueTreePropertyChanged(juce::ValueTree &,
+                                            const juce::Identifier &) {
   // Something changed in the state tree, assume it affects sound parameters
   updateSoundFromState();
 }
 
-void AudioProcessor::valueChanged(juce::Value &) {
+void RvvProcessor::valueChanged(juce::Value &) {
   // Grain data status change, we may have a new index
   updateSoundFromState();
 }
 
-void AudioProcessor::attachToState() {
+void RvvProcessor::attachToState() {
   grainData.referFileInputTo(state.state.getChildWithName("grain_data")
                                  .getPropertyAsValue("src", nullptr));
   state.state.addListener(this);
 }
 
-void AudioProcessor::updateSoundFromState() {
+void RvvProcessor::updateSoundFromState() {
   GrainIndex::Ptr index = grainData.getIndex();
   if (index != nullptr) {
     synth.changeSound(
@@ -147,5 +147,5 @@ void AudioProcessor::updateSoundFromState() {
 }
 
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {
-  return new AudioProcessor();
+  return new RvvProcessor();
 }
