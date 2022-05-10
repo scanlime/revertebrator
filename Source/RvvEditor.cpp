@@ -28,6 +28,7 @@ public:
 
       auto label = new Label();
       label->attachToComponent(knob, false);
+      label->setBorderSize(juce::BorderSize<int>(-5));
       label->setText(param->name, juce::dontSendNotification);
       label->setJustificationType(juce::Justification::centred);
       addAndMakeVisible(*label);
@@ -171,7 +172,7 @@ void RvvEditor::resized() {
   FlexBox box;
   box.flexDirection = FlexBox::Direction::column;
   box.items.add(FlexItem(parts->data).withMinHeight(48));
-  box.items.add(FlexItem(parts->keyboard).withFlex(1));
+  box.items.add(FlexItem(parts->keyboard).withFlex(1).withMaxHeight(64));
   box.items.add(FlexItem(parts->map).withFlex(3));
   box.items.add(FlexItem(parts->wave).withFlex(1));
   box.items.add(FlexItem(parts->params).withMinHeight(100));
