@@ -107,7 +107,11 @@ public:
 
   inline unsigned closestBinForPitch(float hz) const {
     auto x = std::lower_bound(binF0.begin(), binF0.end(), hz) - binF0.begin();
-    return (fabs(binF0[x - 1] - hz) < fabs(binF0[x] - hz)) ? (x - 1) : x;
+    if (x > 0) {
+      return (fabs(binF0[x - 1] - hz) < fabs(binF0[x] - hz)) ? (x - 1) : x;
+    } else {
+      return 0;
+    }
   }
 
   inline juce::Range<float> pitchRange() const {
