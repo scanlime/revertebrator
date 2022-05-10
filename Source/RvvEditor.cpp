@@ -28,7 +28,7 @@ public:
 
       auto label = new Label();
       label->attachToComponent(knob, false);
-      label->setText(param->getName(64), juce::dontSendNotification);
+      label->setText(param->name, juce::dontSendNotification);
       label->setJustificationType(juce::Justification::centred);
       addAndMakeVisible(*label);
       labels.add(label);
