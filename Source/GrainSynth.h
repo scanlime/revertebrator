@@ -69,6 +69,14 @@ public:
   void controllerMoved(int, int) override;
   void renderNextBlock(juce::AudioBuffer<float> &, int, int) override;
 
+  class Listener {
+  public:
+    void blah();
+  };
+
+  void addListener(Listener *);
+  void removeListener(Listener *);
+
 private:
   struct Grain {
     GrainSequence::Point seq;
@@ -85,6 +93,8 @@ private:
                        int);
 
   GrainData &grainData;
+  std::mutex listenerMutex;
+  juce::ListenerList<Listener> listeners;
   std::mt19937 prng;
   std::unique_ptr<GrainSequence> sequence;
   std::deque<Grain> queue;
@@ -101,6 +111,9 @@ public:
   ~GrainSynth() override;
 
   void changeSound(GrainIndex &, const GrainSound::Params &);
+
+  void addListener(GrainVoice::Listener *);
+  void removeListener(GrainVoice::Listener *);
 
   void noteOn(int, int, float) override;
   void handleController(int, int, int) override;

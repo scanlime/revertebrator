@@ -41,6 +41,7 @@ public:
   juce::MidiKeyboardState midiState;
   juce::ThreadPool generalPurposeThreads{2};
   GrainData grainData;
+  GrainSynth synth;
 
 private:
   void attachToState();
@@ -49,7 +50,6 @@ private:
   void valueTreePropertyChanged(juce::ValueTree &,
                                 const juce::Identifier &) override;
 
-  GrainSynth synth;
   juce::Value grainDataStatus;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RvvProcessor)
