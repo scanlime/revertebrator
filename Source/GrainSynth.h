@@ -3,6 +3,7 @@
 #include "GrainData.h"
 #include <JuceHeader.h>
 #include <random>
+#include <deque>
 
 struct GrainSequence {
   using Ptr = std::unique_ptr<GrainSequence>;
