@@ -6,7 +6,7 @@ GrainSequence::Point GrainSequence::generate(std::mt19937 &prng) {
   auto pitchNoise = params.pitchSpread * uniform(prng);
 
   auto pitchBend = midi.pitchWheel / 8192.0 - 1.0;
-  auto modWheel = midi.modWheel / 64.0 - 1.0;
+  auto modWheel = midi.modWheel / 128.0 - 0.5;
   auto gainDb = juce::jmap(midi.velocity, params.gainDbLow, params.gainDbHigh);
 
   auto sel = params.selCenter + modWheel * params.selMod + selNoise;

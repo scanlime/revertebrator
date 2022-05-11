@@ -6,5 +6,5 @@ WavePanel::~WavePanel() {}
 void WavePanel::resized() {}
 
 void WavePanel::paint(juce::Graphics &g) {
-  g.fillAll(juce::Colour(0xFFFFFF00));
+  g.fillAll(juce::Colour(0x10000000));
 }

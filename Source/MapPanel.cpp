@@ -40,9 +40,38 @@ public:
     }
   }
 
-  inline juce::Rectangle<float> grainRectangle(unsigned grain) const {
+  inline float xCoordForBin(unsigned bin) const {
+    // Inverse of X axis calculation in pointInfo()
+    if (bin < index.numBins()) {
+      auto hz = index.binF0[bin];
+      auto relX = log(hz / pitchRange.getStart()) / logPitchRatio;
+      return bounds.getX() + relX * (bounds.getWidth() - 1);
+    } else {
+      return bounds.getWidth();
+    }
+  }
 
-    return bounds;
+  inline float yCoordForGrain(const juce::Range<unsigned> &grainsForBin,
+                              unsigned grain) const {
+    // Inverse of Y axis calculation in pointInfo()
+    if (grain < grainsForBin.getStart()) {
+      return 0;
+    } else if (grain >= grainsForBin.getEnd()) {
+      return bounds.getHeight();
+    } else {
+      auto relY =
+          float(grain - grainsForBin.getStart()) / grainsForBin.getLength();
+      return bounds.getY() + relY * (bounds.getHeight() - 1);
+    }
+    jassert(grainsForBin.contains(grain));
+  }
+
+  inline juce::Rectangle<float> grainRectangle(unsigned grain) const {
+    unsigned bin = index.binForGrain(grain);
+    auto grains = index.grainsForBin(bin);
+    return juce::Rectangle<float>::leftTopRightBottom(
+        xCoordForBin(bin), yCoordForGrain(grains, grain), xCoordForBin(bin + 1),
+        yCoordForGrain(grains, grain + 1));
   }
 
 private:
@@ -214,8 +243,8 @@ public:
     }
     Layout layout(bounds, *index);
     fillGrainSet(g, layout, visited, juce::Colour(0xDDFFFF00));
-    fillGrainSet(g, layout, missing, juce::Colour(0xDDFF0000));
-    fillGrainSet(g, layout, stored, juce::Colour(0xDD0000FF));
+    fillGrainSet(g, layout, missing, juce::Colour(0xDDFF4000));
+    fillGrainSet(g, layout, stored, juce::Colour(0xDD8080FF));
   }
 
 private:
@@ -231,7 +260,7 @@ private:
                            juce::Colour color) {
     juce::RectangleList<float> rects;
     for (auto grain : grains) {
-      rects.add(layout.grainRectangle(grain));
+      rects.add(layout.grainRectangle(grain).expanded(2));
     }
     g.setFillType(juce::FillType(color));
     g.fillRectList(rects);
@@ -302,6 +331,6 @@ void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
   if (image->isEmpty() && isTimerRunning()) {
     stopTimer();
   } else if (!image->isEmpty() && !isTimerRunning()) {
-    startTimerHz(20);
+    startTimerHz(15);
   }
 }

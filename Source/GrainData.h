@@ -108,7 +108,9 @@ public:
   inline unsigned closestBinForPitch(float hz) const {
     auto x = std::lower_bound(binF0.begin(), binF0.end(), hz) - binF0.begin();
     if (x > 0) {
-      return (fabs(binF0[x - 1] - hz) < fabs(binF0[x] - hz)) ? (x - 1) : x;
+      auto bin = (fabs(binF0[x - 1] - hz) < fabs(binF0[x] - hz)) ? (x - 1) : x;
+      jassert(bin < numBins());
+      return bin;
     } else {
       return 0;
     }
@@ -119,7 +121,18 @@ public:
   }
 
   inline juce::Range<unsigned> grainsForBin(unsigned bin) const {
+    jassert(bin < numBins());
     return juce::Range<unsigned>(binX[bin], binX[bin + 1]);
+  }
+
+  inline unsigned binForGrain(unsigned grain) const {
+    jassert(grain < numGrains());
+    auto x = -1 + std::max<int>(
+                      1, std::lower_bound(binX.begin(), binX.end(), grain + 1) -
+                             binX.begin());
+    jassert(x < numBins());
+    jassert(grainsForBin(x).contains(grain));
+    return x;
   }
 
   juce::String describeToString() const;
