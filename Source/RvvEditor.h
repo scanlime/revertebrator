@@ -3,10 +3,11 @@
 #include "RvvProcessor.h"
 #include <JuceHeader.h>
 
-class RvvEditor : public juce::AudioProcessorEditor {
+class RvvEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
   RvvEditor(RvvProcessor &);
   ~RvvEditor() override;
+
   void paint(juce::Graphics &) override;
   void resized() override;
 
@@ -18,6 +19,8 @@ private:
 
   juce::Value savedWidth, savedHeight;
   std::unique_ptr<Parts> parts;
+
+  void timerCallback() override;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RvvEditor)
 };

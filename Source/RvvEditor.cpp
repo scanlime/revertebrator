@@ -167,13 +167,16 @@ RvvEditor::RvvEditor(RvvProcessor &p)
   }
 
   parts->keyboard.setKeyPressBaseOctave(4);
-  parts->keyboard.setLowestVisibleKey(12);
+  parts->keyboard.setLowestVisibleKey(3 * 12);
 
   auto state = p.state.state.getChildWithName("editor_window");
   savedWidth.referTo(state.getPropertyAsValue("width", nullptr));
   savedHeight.referTo(state.getPropertyAsValue("height", nullptr));
   setSize(savedWidth.getValue(), savedHeight.getValue());
   setResizable(true, true);
+
+  // JUCE's recommended approach for setting initial keyboard focus
+  startTimer(400);
 }
 
 RvvEditor::~RvvEditor() {}
@@ -182,18 +185,23 @@ void RvvEditor::paint(juce::Graphics &g) {
   g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
 }
 
-void RvvEditor::resized() {
-  using juce::FlexBox;
-  using juce::FlexItem;
-  FlexBox box;
-  box.flexDirection = FlexBox::Direction::column;
-  box.items.add(FlexItem(parts->data).withMinHeight(48));
-  box.items.add(FlexItem(parts->map).withFlex(7));
-  box.items.add(FlexItem(parts->wave).withFlex(3));
-  for (auto &part : parts->params) {
-    box.items.add(FlexItem(*part).withMinHeight(80).withFlex(1));
+void RvvEditor::timerCallback() {
+  if (isVisible() && isShowing()) {
+    stopTimer();
+    parts->keyboard.grabKeyboardFocus();
   }
-  box.items.add(FlexItem(parts->keyboard).withMinHeight(40).withFlex(1));
+}
+
+void RvvEditor::resized() {
+  juce::FlexBox box;
+  box.flexDirection = juce::FlexBox::Direction::column;
+  box.items.add(juce::FlexItem(parts->data).withMinHeight(48));
+  box.items.add(juce::FlexItem(parts->map).withFlex(7));
+  box.items.add(juce::FlexItem(parts->wave).withFlex(3));
+  for (auto &part : parts->params) {
+    box.items.add(juce::FlexItem(*part).withMinHeight(80).withFlex(1));
+  }
+  box.items.add(juce::FlexItem(parts->keyboard).withMinHeight(40).withFlex(1));
   box.performLayout(getLocalBounds().toFloat());
   savedWidth = getWidth();
   savedHeight = getHeight();
