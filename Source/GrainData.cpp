@@ -319,8 +319,24 @@ GrainWaveform::GrainWaveform(const Key &key, int channels, int samples)
 GrainWaveform::~GrainWaveform() {}
 
 GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
-
 GrainIndex::~GrainIndex() {}
+
+void GrainIndex::Listener::grainIndexWaveformStored(
+    const GrainWaveform::Key &) {}
+void GrainIndex::Listener::grainIndexWaveformVisited(
+    const GrainWaveform::Key &) {}
+void GrainIndex::Listener::grainIndexWaveformMissing(
+    const GrainWaveform::Key &) {}
+
+void GrainIndex::addListener(Listener *listener) {
+  std::lock_guard<std::mutex> guard(listenerMutex);
+  listeners.add(listener);
+}
+
+void GrainIndex::removeListener(Listener *listener) {
+  std::lock_guard<std::mutex> guard(listenerMutex);
+  listeners.remove(listener);
+}
 
 int GrainIndex::Hasher::generateHash(const GrainWaveform::Window &w,
                                      int upperLimit) const noexcept {
@@ -337,33 +353,35 @@ int GrainIndex::Hasher::generateHash(const GrainWaveform::Key &k,
 }
 
 void GrainIndex::cacheWaveform(GrainWaveform &wave) {
-  std::lock_guard<std::mutex> guard(cacheMutex);
-  cache.set(wave.key, wave);
+  {
+    std::lock_guard<std::mutex> guard(cacheMutex);
+    cache.set(wave.key, wave);
+  }
+  {
+    auto key = wave.key;
+    std::lock_guard<std::mutex> guard(listenerMutex);
+    listeners.call([key](Listener &l) { l.grainIndexWaveformStored(key); });
+  }
 }
 
 GrainWaveform::Ptr
-GrainIndex::getCachedWaveformOrInsertEmpty(const GrainWaveform::Key &k) {
+GrainIndex::getCachedWaveformOrInsertEmpty(const GrainWaveform::Key &key) {
   std::lock_guard<std::mutex> guard(cacheMutex);
-  auto ptr = cache[k];
+  auto ptr = cache[key];
   if (ptr) {
+    std::lock_guard<std::mutex> guard(listenerMutex);
+    listeners.call([key](Listener &l) { l.grainIndexWaveformVisited(key); });
     return ptr;
   } else {
-    GrainWaveform::Ptr empty = new GrainWaveform(k, 0, 0);
-    cache.set(k, *empty);
+    GrainWaveform::Ptr empty = new GrainWaveform(key, 0, 0);
+    cache.set(key, *empty);
+    std::lock_guard<std::mutex> guard(listenerMutex);
+    listeners.call([key](Listener &l) { l.grainIndexWaveformMissing(key); });
     return nullptr;
   }
 }
 
-juce::String GrainIndex::describeToString() const {
-  using juce::String;
-  return String(numGrains()) + " grains, " + String(numBins()) + " bins, " +
-         String(maxGrainWidth, 1) + " sec, " +
-         String(pitchRange().getStart(), 1) + " - " +
-         String(pitchRange().getEnd(), 1) + " Hz, " +
-         numSamplesToString(numSamples);
-}
-
-juce::String GrainIndex::numSamplesToString(juce::uint64 samples) {
+static juce::String numSamplesToString(juce::uint64 samples) {
   static const struct {
     const char *prefix;
     double scale;
@@ -378,6 +396,15 @@ juce::String GrainIndex::numSamplesToString(juce::uint64 samples) {
   }
   return juce::String(samples / unit->scale, unit->precision) + " " +
          unit->prefix + "samples";
+}
+
+juce::String GrainIndex::describeToString() const {
+  using juce::String;
+  return String(numGrains()) + " grains, " + String(numBins()) + " bins, " +
+         String(maxGrainWidth, 1) + " sec, " +
+         String(pitchRange().getStart(), 1) + " - " +
+         String(pitchRange().getEnd(), 1) + " Hz, " +
+         numSamplesToString(numSamples);
 }
 
 juce::Result GrainIndex::load() {

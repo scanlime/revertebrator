@@ -123,9 +123,18 @@ public:
   }
 
   juce::String describeToString() const;
-  static juce::String numSamplesToString(juce::uint64 numSamples);
   void cacheWaveform(GrainWaveform &);
   GrainWaveform::Ptr getCachedWaveformOrInsertEmpty(const GrainWaveform::Key &);
+
+  class Listener {
+  public:
+    virtual void grainIndexWaveformStored(const GrainWaveform::Key &);
+    virtual void grainIndexWaveformVisited(const GrainWaveform::Key &);
+    virtual void grainIndexWaveformMissing(const GrainWaveform::Key &);
+  };
+
+  void addListener(Listener *);
+  void removeListener(Listener *);
 
 private:
   struct Hasher {
@@ -135,6 +144,9 @@ private:
 
   std::mutex cacheMutex;
   juce::HashMap<GrainWaveform::Key, GrainWaveform::Ptr, Hasher> cache;
+
+  std::mutex listenerMutex;
+  juce::ListenerList<Listener> listeners;
 
   juce::Result load();
 
