@@ -253,8 +253,7 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
   for (auto &grain : queue) {
     if (grain.wave == nullptr) {
       // The grain we need isn't available yet; put this back on the end
-      // of the queue to try again later, and for now replace with a
-      // recycled grain from the reservoir.
+      // of the queue to try again later. For now replace with a recycled grain.
       grainsToRetry.push_back(grain);
       if (reservoir.size() > 0) {
         std::uniform_int_distribution<> uniform(0, reservoir.size() - 1);
@@ -333,8 +332,11 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
     }
   }
 
-  // Remember to retry grains we had to postpone above
-  for (auto &grain : grainsToRetry) {
-    queue.push_back(grain);
+  // If we would like to retry grains, requeue them but only if there is
+  // spare capacity in the thread pool, it doesn't help to add to a backlog.
+  if (!grainsToRetry.empty() && grainData.averageLoadQueueDepth() < 1.f) {
+    for (auto &grain : grainsToRetry) {
+      queue.push_back(grain);
+    }
   }
 }
