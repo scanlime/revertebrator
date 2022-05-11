@@ -132,6 +132,7 @@ void GrainVoice::startNote(int midiNote, float velocity,
     sampleOffsetInQueue = 0;
     queue.clear();
     reservoir.clear();
+    reservoirSet.clear();
     fillQueueForSound(*sound);
     fetchQueueWaveforms(*sound);
   }
@@ -232,31 +233,6 @@ int GrainVoice::numActiveGrainsInQueue(const GrainSound &sound) {
   return numActive;
 }
 
-int GrainVoice::randomReservoirSlot() {
-  std::uniform_int_distribution<> uniform(0, reservoir.size() - 1);
-  return uniform(prng);
-}
-
-void GrainVoice::addToGrainReservoir(const Grain &grain) {
-  constexpr int maxReservoirGrains = 64;
-  jassert(grain.wave != nullptr);
-  if (reservoir.size() < maxReservoirGrains) {
-    reservoir.push_back(grain);
-  } else {
-    jassert(reservoir.size() == maxReservoirGrains);
-    reservoir[randomReservoirSlot()] = grain;
-  }
-}
-
-bool GrainVoice::replaceWithGrainFromReservoir(Grain &out) {
-  if (reservoir.size() > 0) {
-    out = reservoir[randomReservoirSlot()];
-    return true;
-  } else {
-    return false;
-  }
-}
-
 void GrainVoice::addListener(Listener *listener) {
   std::lock_guard<std::mutex> guard(listenerMutex);
   listeners.add(listener);
@@ -271,57 +247,63 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
                                  juce::AudioBuffer<float> &outputBuffer,
                                  int startSample, int numSamples) {
   auto repeatRate = sound.grainRepeatsPerSample();
-  {
-    int queueTimestamp = 0;
-    for (auto &grain : queue) {
-      if (grain.wave == nullptr) {
-        // The grain we need isn't available yet; try a replacement
-        if (replaceWithGrainFromReservoir(grain)) {
-          jassert(grain.wave != nullptr);
-        } else {
-          // Just try to stall without advancing the queue. This will be
-          // harmless if we are just starting, but if it happens later
-          // there will be audio glitches as we repeat a frame.
-          return;
-        }
-      }
-      if (queueTimestamp > (sampleOffsetInQueue + numSamples)) {
-        // Happens after the end of this render block
-        break;
-      }
+  int queueTimestamp = 0;
+  std::vector<Grain> grainsToRetry;
 
-      auto &wave = *grain.wave;
-      auto gain = grain.seq.gain;
-      auto srcSize = wave.buffer.getNumSamples();
-      auto inChannels = wave.buffer.getNumChannels();
-      auto outChannels = outputBuffer.getNumChannels();
-
-      // Figure out where this grain goes relative to the block we are
-      // rendering
-      auto relative = queueTimestamp - sampleOffsetInQueue;
-      auto copySource = std::max<int>(0, -relative);
-      auto copyDest = std::max<int>(0, relative);
-      auto copySize = std::min(numSamples - copyDest, srcSize - copySource);
-
-      {
-        std::lock_guard<std::mutex> guard(listenerMutex);
-        auto seq = grain.seq;
-        listeners.call([this, &sound, &wave, &seq, relative](Listener &l) {
-          l.grainVoicePlaying(*this, sound, wave, seq, relative);
-        });
-      }
-
-      if (copySize > 0) {
-        for (int ch = 0; ch < outChannels; ch++) {
-          outputBuffer.addFrom(ch, startSample + copyDest, wave.buffer,
-                               ch % inChannels, copySource, copySize, gain);
-        }
-      }
-      if (!timestampForNextRepeat(queueTimestamp, repeatRate)) {
-        break;
+  for (auto &grain : queue) {
+    if (grain.wave == nullptr) {
+      // The grain we need isn't available yet; put this back on the end
+      // of the queue to try again later, and for now replace with a
+      // recycled grain from the reservoir.
+      grainsToRetry.push_back(grain);
+      if (reservoir.size() > 0) {
+        std::uniform_int_distribution<> uniform(0, reservoir.size() - 1);
+        grain = reservoir[uniform(prng)];
+        jassert(grain.wave != nullptr);
+      } else {
+        // Just try to stall without advancing the queue. This will be
+        // harmless if we are just starting, but if it happens later
+        // there will be audio glitches as we repeat a frame.
+        return;
       }
     }
+    if (queueTimestamp > (sampleOffsetInQueue + numSamples)) {
+      // Happens after the end of this render block
+      break;
+    }
+
+    auto &wave = *grain.wave;
+    auto gain = grain.seq.gain;
+    auto srcSize = wave.buffer.getNumSamples();
+    auto inChannels = wave.buffer.getNumChannels();
+    auto outChannels = outputBuffer.getNumChannels();
+
+    // Figure out where this grain goes relative to the block we are
+    // rendering
+    auto relative = queueTimestamp - sampleOffsetInQueue;
+    auto copySource = std::max<int>(0, -relative);
+    auto copyDest = std::max<int>(0, relative);
+    auto copySize = std::min(numSamples - copyDest, srcSize - copySource);
+
+    {
+      std::lock_guard<std::mutex> guard(listenerMutex);
+      auto seq = grain.seq;
+      listeners.call([this, &sound, &wave, &seq, relative](Listener &l) {
+        l.grainVoicePlaying(*this, sound, wave, seq, relative);
+      });
+    }
+
+    if (copySize > 0) {
+      for (int ch = 0; ch < outChannels; ch++) {
+        outputBuffer.addFrom(ch, startSample + copyDest, wave.buffer,
+                             ch % inChannels, copySource, copySize, gain);
+      }
+    }
+    if (!timestampForNextRepeat(queueTimestamp, repeatRate)) {
+      break;
+    }
   }
+
   // Advance past the rendered block, and remove grains we're fully done with
   sampleOffsetInQueue += numSamples;
   while (!queue.empty()) {
@@ -337,11 +319,22 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
     int queueTimestamp = 0;
     if (timestampForNextRepeat(queueTimestamp, repeatRate)) {
       sampleOffsetInQueue -= queueTimestamp;
-      addToGrainReservoir(queue.front());
+      // Temporarily hold on to all unique grains on this voice, to
+      // use them as replacements for grains that are still loading.
+      if (!reservoirSet.contains(queue.front().seq.grain)) {
+        reservoirSet.add(queue.front().seq.grain);
+        reservoir.push_back(queue.front());
+      }
       queue.pop_front();
     } else {
       // No repeats, we're entirely done
       queue.clear();
+      sequence = nullptr;
     }
+  }
+
+  // Remember to retry grains we had to postpone above
+  for (auto &grain : grainsToRetry) {
+    queue.push_back(grain);
   }
 }

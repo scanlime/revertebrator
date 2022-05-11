@@ -90,19 +90,20 @@ private:
   void fillQueueForSound(const GrainSound &);
   void fetchQueueWaveforms(GrainSound &);
   int numActiveGrainsInQueue(const GrainSound &);
-  void addToGrainReservoir(const Grain &);
-  bool replaceWithGrainFromReservoir(Grain &);
-  int randomReservoirSlot();
   void renderFromQueue(const GrainSound &, juce::AudioBuffer<float> &, int,
                        int);
 
   GrainData &grainData;
+
   std::mutex listenerMutex;
   juce::ListenerList<Listener> listeners;
+
   std::mt19937 prng;
   std::unique_ptr<GrainSequence> sequence;
   std::deque<Grain> queue;
   std::vector<Grain> reservoir;
+  juce::SortedSet<unsigned> reservoirSet;
+
   int sampleOffsetInQueue{0};
   int currentModWheelPosition{0};
 
