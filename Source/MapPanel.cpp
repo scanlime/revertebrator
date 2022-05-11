@@ -295,8 +295,7 @@ private:
   }
 
   void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
-                         const GrainWaveform &wave,
-                         const GrainSequence::Point &seq,
+                         GrainWaveform &wave, const GrainSequence::Point &seq,
                          int sampleNum) override {
     std::lock_guard<std::mutex> guard(accumMutex);
     accumPlaying.add(wave.key.grain);

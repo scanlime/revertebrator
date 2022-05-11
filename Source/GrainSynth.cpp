@@ -288,7 +288,7 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
       std::lock_guard<std::mutex> guard(listenerMutex);
       auto seq = grain.seq;
       listeners.call([this, &sound, &wave, &seq, relative](Listener &l) {
-        l.grainVoicePlaying(*this, sound, wave, seq, relative);
+        l.grainVoicePlaying(*this, sound, wave, seq, -relative);
       });
     }
 
