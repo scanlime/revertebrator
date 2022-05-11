@@ -20,7 +20,7 @@ public:
     juce::uint64 sample;
   };
 
-  inline PointInfo pointInfo(const juce::Point<float> &p) {
+  inline PointInfo pointInfo(const juce::Point<float> &p) const {
     if (bounds.contains(p)) {
       auto result = PointInfo{.valid = true};
 
@@ -38,6 +38,11 @@ public:
     } else {
       return PointInfo{false};
     }
+  }
+
+  inline juce::Rectangle<float> grainRectangle(unsigned grain) const {
+
+    return bounds;
   }
 
 private:
@@ -94,6 +99,11 @@ public:
     if (image) {
       g.drawImage(*image, location);
     }
+  }
+
+  bool isEmpty() {
+    std::lock_guard<std::mutex> guard(lock);
+    return image == nullptr;
   }
 
 private:
@@ -183,6 +193,66 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImageRender)
 };
 
+class MapPanel::LiveOverlay : private GrainIndex::Listener {
+public:
+  LiveOverlay(GrainIndex &ix) : index(ix) { index->addListener(this); }
+  ~LiveOverlay() { index->removeListener(this); }
+
+  bool isEmpty() {
+    std::lock_guard<std::mutex> guard(setMutex);
+    return grainStored.isEmpty() && grainVisited.isEmpty() &&
+           grainMissing.isEmpty();
+  }
+
+  void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
+    juce::SortedSet<unsigned> stored, visited, missing;
+    {
+      std::lock_guard<std::mutex> guard(setMutex);
+      grainStored.swapWith(stored);
+      grainVisited.swapWith(visited);
+      grainMissing.swapWith(missing);
+    }
+    Layout layout(bounds, *index);
+    fillGrainSet(g, layout, visited, juce::Colour(0xDDFFFF00));
+    fillGrainSet(g, layout, missing, juce::Colour(0xDDFF0000));
+    fillGrainSet(g, layout, stored, juce::Colour(0xDD0000FF));
+  }
+
+private:
+  GrainIndex::Ptr index;
+
+  std::mutex setMutex;
+  juce::SortedSet<unsigned> grainStored;
+  juce::SortedSet<unsigned> grainVisited;
+  juce::SortedSet<unsigned> grainMissing;
+
+  static void fillGrainSet(juce::Graphics &g, const Layout &layout,
+                           juce::SortedSet<unsigned> &grains,
+                           juce::Colour color) {
+    juce::RectangleList<float> rects;
+    for (auto grain : grains) {
+      rects.add(layout.grainRectangle(grain));
+    }
+    g.setFillType(juce::FillType(color));
+    g.fillRectList(rects);
+  }
+
+  void grainIndexWaveformStored(const GrainWaveform::Key &key) override {
+    std::lock_guard<std::mutex> guard(setMutex);
+    grainStored.add(key.grain);
+  }
+
+  void grainIndexWaveformVisited(const GrainWaveform::Key &key) override {
+    std::lock_guard<std::mutex> guard(setMutex);
+    grainVisited.add(key.grain);
+  }
+
+  void grainIndexWaveformMissing(const GrainWaveform::Key &key) override {
+    std::lock_guard<std::mutex> guard(setMutex);
+    grainMissing.add(key.grain);
+  }
+};
+
 MapPanel::MapPanel(RvvProcessor &processor)
     : processor(processor),
       image(std::make_unique<ImageRender>(processor.generalPurposeThreads)) {
@@ -194,16 +264,33 @@ MapPanel::MapPanel(RvvProcessor &processor)
 MapPanel::~MapPanel() { image->removeChangeListener(this); }
 
 void MapPanel::paint(juce::Graphics &g) {
-  image->drawLatest(g, getLocalBounds().toFloat());
+  auto bounds = getLocalBounds().toFloat();
+  image->drawLatest(g, bounds);
+  if (live) {
+    live->paint(g, bounds);
+  }
 }
 
 void MapPanel::resized() { requestNewImage(); }
-
 void MapPanel::valueChanged(juce::Value &) { requestNewImage(); }
 
+void MapPanel::timerCallback() {
+  bool liveIsEmpty = !live || live->isEmpty();
+  if (!liveIsEmpty || !liveWasEmpty) {
+    repaint();
+  }
+  liveWasEmpty = liveIsEmpty;
+}
+
 void MapPanel::requestNewImage() {
+  auto index = processor.grainData.getIndex();
+  if (index == nullptr) {
+    live = nullptr;
+  } else {
+    live = std::make_unique<LiveOverlay>(*index);
+  }
   image->requestChange(ImageRender::Request{
-      .index = processor.grainData.getIndex(),
+      .index = index,
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
   });
@@ -212,4 +299,9 @@ void MapPanel::requestNewImage() {
 void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
   const juce::MessageManagerLock mmlock;
   repaint();
+  if (image->isEmpty() && isTimerRunning()) {
+    stopTimer();
+  } else if (!image->isEmpty() && !isTimerRunning()) {
+    startTimerHz(20);
+  }
 }

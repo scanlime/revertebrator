@@ -321,13 +321,6 @@ GrainWaveform::~GrainWaveform() {}
 GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
 GrainIndex::~GrainIndex() {}
 
-void GrainIndex::Listener::grainIndexWaveformStored(
-    const GrainWaveform::Key &) {}
-void GrainIndex::Listener::grainIndexWaveformVisited(
-    const GrainWaveform::Key &) {}
-void GrainIndex::Listener::grainIndexWaveformMissing(
-    const GrainWaveform::Key &) {}
-
 void GrainIndex::addListener(Listener *listener) {
   std::lock_guard<std::mutex> guard(listenerMutex);
   listeners.add(listener);

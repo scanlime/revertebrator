@@ -128,9 +128,9 @@ public:
 
   class Listener {
   public:
-    virtual void grainIndexWaveformStored(const GrainWaveform::Key &);
-    virtual void grainIndexWaveformVisited(const GrainWaveform::Key &);
-    virtual void grainIndexWaveformMissing(const GrainWaveform::Key &);
+    virtual void grainIndexWaveformStored(const GrainWaveform::Key &) = 0;
+    virtual void grainIndexWaveformVisited(const GrainWaveform::Key &) = 0;
+    virtual void grainIndexWaveformMissing(const GrainWaveform::Key &) = 0;
   };
 
   void addListener(Listener *);
