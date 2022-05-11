@@ -237,7 +237,7 @@ public:
 
   GrainIndex &getIndex() { return *index; }
 
-  bool paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
+  paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
     Layout layout(bounds, *index);
     juce::SortedSet<unsigned> stored, visited, missing, playing;
     {
@@ -254,8 +254,6 @@ public:
     fillGrainSet(g, layout, playing, juce::Colour(0xAAFFFF00));
     fillGrainSet(g, layout, visited, juce::Colour(0xAA00FF00));
     fillGrainSet(g, layout, loading, juce::Colour(0xAAFF0000));
-
-    return true;
   }
 
 private:
