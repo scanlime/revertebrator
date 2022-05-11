@@ -6,46 +6,63 @@ RvvProcessor::RvvProcessor()
     : juce::AudioProcessor(BusesProperties().withOutput(
           "Output", juce::AudioChannelSet::stereo())),
       state(*this, nullptr, "state",
-            {std::make_unique<juce::AudioParameterFloat>(
-                 "win_width0", "Win A",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "win_width1", "Win B",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "win_phase1", "Phase B",
-                 juce::NormalisableRange<float>(-1.0f, 1.0f), 0.f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "win_mix", "Mix AB",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "grain_rate", "Gr Rate",
-                 juce::NormalisableRange<float>(0.0f, 200.0f), 10.f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "speed_warp", "Spd Warp",
-                 juce::NormalisableRange<float>(0.1f, 3.0f), 1.f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "sel_center", "Sel",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "sel_mod", "S Mod", juce::NormalisableRange<float>(0.0f, 1.0f),
-                 1.0f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "sel_spread", "S Spread",
-                 juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
-             std::make_unique<juce::AudioParameterFloat>(
-                 "pitch_spread", "P Spread",
-                 juce::NormalisableRange<float>(0.0f, 8.0f), 0.0f)}),
+            {
+                std::make_unique<juce::AudioParameterFloat>(
+                    "win_width0", "Win A",
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "win_width1", "Win B",
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "win_phase1", "Phase B",
+                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "win_mix", "Mix AB",
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "grain_rate", "Grain Hz",
+                    juce::NormalisableRange<float>(0.0f, 200.0f), 10.f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "speed_warp", "Speed",
+                    juce::NormalisableRange<float>(0.1f, 2.0f), 1.f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "sel_center", "Sel",
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "sel_mod", "S Mod",
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "sel_spread", "S Spread",
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "pitch_spread", "P Spread",
+                    juce::NormalisableRange<float>(0.0f, 8.0f), 0.0f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "pitch_bend_range", "P Bend",
+                    juce::NormalisableRange<float>(1.0f, 64.0f), 12.0f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "gain_db_low", "Vol Lo",
+                    juce::NormalisableRange<float>(-100.0f, 0.0f), -70.0f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "gain_db_high", "Vol Hi",
+                    juce::NormalisableRange<float>(-100.0f, 0.0f), -30.0f),
+            }),
       grainData(generalPurposeThreads), synth(grainData, 128) {
 
-  constexpr auto width = 800;
-  constexpr auto height = 400;
-  state.state.appendChild(
-      {"editor_window", {{"width", width}, {"height", height}}, {}}, nullptr);
+  constexpr auto width = 500;
+  constexpr auto height = 700;
+
   state.state.appendChild({"grain_data", {{"src", ""}}, {}}, nullptr);
   state.state.appendChild({"recent_files", {}, {}}, nullptr);
-  attachToState();
+  state.state.appendChild(
+      {
+          "editor_window",
+          {{"width", width}, {"height", height}},
+          {},
+      },
+      nullptr);
 
+  attachToState();
   grainData.referToStatusOutput(grainDataStatus);
   grainDataStatus.addListener(this);
 }
@@ -139,9 +156,10 @@ void RvvProcessor::updateSoundFromState() {
              .speedWarp = state.getParameterAsValue("speed_warp").getValue(),
              .pitchSpread =
                  state.getParameterAsValue("pitch_spread").getValue(),
-             .pitchBendRange = 12,
-             .gainDbLow = -50,
-             .gainDbHigh = -25,
+             .pitchBendRange =
+                 state.getParameterAsValue("pitch_bend_range").getValue(),
+             .gainDbLow = state.getParameterAsValue("gain_db_low").getValue(),
+             .gainDbHigh = state.getParameterAsValue("gain_db_high").getValue(),
          }});
   }
 }
