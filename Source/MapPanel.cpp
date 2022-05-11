@@ -31,7 +31,7 @@ public:
 
       // Y axis: linear grain selector, variable resolution
       auto gr = index.grainsForBin(result.bin);
-      float relY = (p.y - bounds.getY()) / bounds.getHeight();
+      float relY = 1.f - (p.y - bounds.getY()) / bounds.getHeight();
       result.grain = gr.clipValue(gr.getStart() + gr.getLength() * relY);
       result.sample = index.grainX[result.grain];
       return result;
@@ -59,8 +59,8 @@ public:
     } else if (grain >= grainsForBin.getEnd()) {
       return bounds.getHeight();
     } else {
-      auto relY =
-          float(grain - grainsForBin.getStart()) / grainsForBin.getLength();
+      auto relY = 1.f - float(grain - grainsForBin.getStart()) /
+                            grainsForBin.getLength();
       return bounds.getY() + relY * (bounds.getHeight() - 1);
     }
     jassert(grainsForBin.contains(grain));
@@ -70,8 +70,8 @@ public:
     unsigned bin = index.binForGrain(grain);
     auto grains = index.grainsForBin(bin);
     return juce::Rectangle<float>::leftTopRightBottom(
-        xCoordForBin(bin), yCoordForGrain(grains, grain), xCoordForBin(bin + 1),
-        yCoordForGrain(grains, grain + 1));
+        xCoordForBin(bin), yCoordForGrain(grains, grain + 1),
+        xCoordForBin(bin + 1), yCoordForGrain(grains, grain));
   }
 
 private:
@@ -237,7 +237,7 @@ public:
 
   GrainIndex &getIndex() { return *index; }
 
-  paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
+  void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
     Layout layout(bounds, *index);
     juce::SortedSet<unsigned> stored, visited, missing, playing;
     {
