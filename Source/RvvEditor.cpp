@@ -223,8 +223,8 @@ void RvvEditor::resized() {
   juce::FlexBox box;
   box.flexDirection = juce::FlexBox::Direction::column;
   box.items.add(juce::FlexItem(parts->data).withMinHeight(48));
-  box.items.add(juce::FlexItem(parts->map).withFlex(8));
-  box.items.add(juce::FlexItem(parts->wave).withFlex(3));
+  box.items.add(juce::FlexItem(parts->map).withFlex(10));
+  box.items.add(juce::FlexItem(parts->wave).withFlex(4));
   for (auto &part : parts->params) {
     box.items.add(juce::FlexItem(*part).withMinHeight(80).withFlex(1));
   }
