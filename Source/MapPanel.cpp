@@ -140,8 +140,8 @@ private:
     fg.getHSL(fgH, fgS, fgL);
 
     auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
-    auto image =
-        std::make_unique<juce::Image>(juce::Image::RGB, width, height, false);
+    auto image = std::make_unique<juce::Image>(
+        juce::Image::RGB, std::max(1, width), std::max(1, height), false);
 
     if (req.index && req.index->isValid()) {
       Layout layout(req.bounds.toFloat(), *req.index);
