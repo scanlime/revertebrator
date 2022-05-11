@@ -47,7 +47,7 @@ RvvProcessor::RvvProcessor()
                     "gain_db_high", "Vol Hi",
                     juce::NormalisableRange<float>(-100.0f, 0.0f), -30.0f),
             }),
-      grainData(generalPurposeThreads), synth(grainData, 128) {
+      grainData(generalPurposeThreads), synth(grainData, 512) {
 
   state.state.appendChild({"grain_data", {{"src", ""}}, {}}, nullptr);
   state.state.appendChild({"recent_files", {}, {}}, nullptr);

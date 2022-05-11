@@ -277,8 +277,7 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
     auto inChannels = wave.buffer.getNumChannels();
     auto outChannels = outputBuffer.getNumChannels();
 
-    // Figure out where this grain goes relative to the block we are
-    // rendering
+    // Figure out where this grain goes relative to the block we are rendering
     auto relative = queueTimestamp - sampleOffsetInQueue;
     auto copySource = std::max<int>(0, -relative);
     auto copyDest = std::max<int>(0, relative);
@@ -286,10 +285,10 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
 
     {
       std::lock_guard<std::mutex> guard(listenerMutex);
-      auto seq = grain.seq;
-      listeners.call([this, &sound, &wave, &seq, relative](Listener &l) {
-        l.grainVoicePlaying(*this, sound, wave, seq, -relative);
-      });
+      listeners.call(
+          [this, &sound, &wave, seq = grain.seq, relative](Listener &l) {
+            l.grainVoicePlaying(*this, sound, wave, seq, -relative);
+          });
     }
 
     if (copySize > 0) {
