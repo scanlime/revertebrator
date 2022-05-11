@@ -71,7 +71,11 @@ public:
 
   class Listener {
   public:
-    void blah();
+    virtual void grainVoicePlaying(const GrainVoice &voice,
+                                   const GrainSound &sound,
+                                   const GrainWaveform &wave,
+                                   const GrainSequence::Point &seq,
+                                   int sampleNum) = 0;
   };
 
   void addListener(Listener *);

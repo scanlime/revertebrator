@@ -60,6 +60,24 @@ void GrainSynth::handleController(int channel, int controller, int value) {
   juce::Synthesiser::handleController(channel, controller, value);
 }
 
+void GrainSynth::addListener(GrainVoice::Listener *listener) {
+  for (auto *generic : voices) {
+    auto voice = dynamic_cast<GrainVoice *>(generic);
+    if (voice) {
+      voice->addListener(listener);
+    }
+  }
+}
+
+void GrainSynth::removeListener(GrainVoice::Listener *listener) {
+  for (auto *generic : voices) {
+    auto voice = dynamic_cast<GrainVoice *>(generic);
+    if (voice) {
+      voice->removeListener(listener);
+    }
+  }
+}
+
 GrainSound::GrainSound(GrainIndex &index, const Params &params)
     : index(index), params(params),
       speedRatio(index.sampleRate / params.sampleRate *
@@ -239,6 +257,16 @@ bool GrainVoice::replaceWithGrainFromReservoir(Grain &out) {
   }
 }
 
+void GrainVoice::addListener(Listener *listener) {
+  std::lock_guard<std::mutex> guard(listenerMutex);
+  listeners.add(listener);
+}
+
+void GrainVoice::removeListener(Listener *listener) {
+  std::lock_guard<std::mutex> guard(listenerMutex);
+  listeners.remove(listener);
+}
+
 void GrainVoice::renderFromQueue(const GrainSound &sound,
                                  juce::AudioBuffer<float> &outputBuffer,
                                  int startSample, int numSamples) {
@@ -274,6 +302,14 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
       auto copySource = std::max<int>(0, -relative);
       auto copyDest = std::max<int>(0, relative);
       auto copySize = std::min(numSamples - copyDest, srcSize - copySource);
+
+      {
+        std::lock_guard<std::mutex> guard(listenerMutex);
+        auto seq = grain.seq;
+        listeners.call([this, &sound, &wave, &seq, relative](Listener &l) {
+          l.grainVoicePlaying(*this, sound, wave, seq, relative);
+        });
+      }
 
       if (copySize > 0) {
         for (int ch = 0; ch < outChannels; ch++) {

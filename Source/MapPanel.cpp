@@ -222,37 +222,51 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImageRender)
 };
 
-class MapPanel::LiveOverlay : private GrainIndex::Listener {
+class MapPanel::LiveOverlay : private GrainIndex::Listener,
+                              private GrainVoice::Listener {
 public:
-  LiveOverlay(GrainIndex &ix) : index(ix) { index->addListener(this); }
-  ~LiveOverlay() { index->removeListener(this); }
+  LiveOverlay(GrainIndex &ix, GrainSynth &synth) : index(ix), synth(synth) {
+    index->addListener(this);
+    synth.addListener(this);
+  }
+
+  ~LiveOverlay() {
+    index->removeListener(this);
+    synth.removeListener(this);
+  }
+
   GrainIndex &getIndex() { return *index; }
 
   bool paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
-    juce::SortedSet<unsigned> stored, visited, missing;
+    Layout layout(bounds, *index);
+    juce::SortedSet<unsigned> stored, visited, missing, playing;
     {
       std::lock_guard<std::mutex> guard(accumMutex);
       accumStored.swapWith(stored);
       accumVisited.swapWith(visited);
       accumMissing.swapWith(missing);
+      accumPlaying.swapWith(playing);
     }
 
     loading.addSet(missing);
     loading.removeValuesIn(stored);
 
-    Layout layout(bounds, *index);
+    fillGrainSet(g, layout, playing, juce::Colour(0xAAFFFF00));
     fillGrainSet(g, layout, visited, juce::Colour(0xAA00FF00));
     fillGrainSet(g, layout, loading, juce::Colour(0xAAFF0000));
+
     return true;
   }
 
 private:
   GrainIndex::Ptr index;
+  GrainSynth &synth;
 
   std::mutex accumMutex;
   juce::SortedSet<unsigned> accumStored;
   juce::SortedSet<unsigned> accumVisited;
   juce::SortedSet<unsigned> accumMissing;
+  juce::SortedSet<unsigned> accumPlaying;
 
   juce::SortedSet<unsigned> loading;
 
@@ -280,6 +294,14 @@ private:
   void grainIndexWaveformMissing(const GrainWaveform::Key &key) override {
     std::lock_guard<std::mutex> guard(accumMutex);
     accumMissing.add(key.grain);
+  }
+
+  void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
+                         const GrainWaveform &wave,
+                         const GrainSequence::Point &seq,
+                         int sampleNum) override {
+    std::lock_guard<std::mutex> guard(accumMutex);
+    accumPlaying.add(wave.key.grain);
   }
 };
 
@@ -309,7 +331,7 @@ void MapPanel::valueChanged(juce::Value &) {
   if (index == nullptr) {
     live = nullptr;
   } else if (live == nullptr || index != &live->getIndex()) {
-    live = std::make_unique<LiveOverlay>(*index);
+    live = std::make_unique<LiveOverlay>(*index, processor.synth);
   }
 }
 
