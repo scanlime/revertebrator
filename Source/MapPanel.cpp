@@ -226,34 +226,35 @@ class MapPanel::LiveOverlay : private GrainIndex::Listener {
 public:
   LiveOverlay(GrainIndex &ix) : index(ix) { index->addListener(this); }
   ~LiveOverlay() { index->removeListener(this); }
+  GrainIndex &getIndex() { return *index; }
 
-  bool isEmpty() {
-    std::lock_guard<std::mutex> guard(setMutex);
-    return grainStored.isEmpty() && grainVisited.isEmpty() &&
-           grainMissing.isEmpty();
-  }
-
-  void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
+  bool paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
     juce::SortedSet<unsigned> stored, visited, missing;
     {
-      std::lock_guard<std::mutex> guard(setMutex);
-      grainStored.swapWith(stored);
-      grainVisited.swapWith(visited);
-      grainMissing.swapWith(missing);
+      std::lock_guard<std::mutex> guard(accumMutex);
+      accumStored.swapWith(stored);
+      accumVisited.swapWith(visited);
+      accumMissing.swapWith(missing);
     }
+
+    loading.addSet(missing);
+    loading.removeValuesIn(stored);
+
     Layout layout(bounds, *index);
-    fillGrainSet(g, layout, visited, juce::Colour(0xDDFFFF00));
-    fillGrainSet(g, layout, missing, juce::Colour(0xDDFF4000));
-    fillGrainSet(g, layout, stored, juce::Colour(0xDD8080FF));
+    fillGrainSet(g, layout, visited, juce::Colour(0xAA00FF00));
+    fillGrainSet(g, layout, loading, juce::Colour(0xAAFF0000));
+    return true;
   }
 
 private:
   GrainIndex::Ptr index;
 
-  std::mutex setMutex;
-  juce::SortedSet<unsigned> grainStored;
-  juce::SortedSet<unsigned> grainVisited;
-  juce::SortedSet<unsigned> grainMissing;
+  std::mutex accumMutex;
+  juce::SortedSet<unsigned> accumStored;
+  juce::SortedSet<unsigned> accumVisited;
+  juce::SortedSet<unsigned> accumMissing;
+
+  juce::SortedSet<unsigned> loading;
 
   static void fillGrainSet(juce::Graphics &g, const Layout &layout,
                            juce::SortedSet<unsigned> &grains,
@@ -267,18 +268,18 @@ private:
   }
 
   void grainIndexWaveformStored(const GrainWaveform::Key &key) override {
-    std::lock_guard<std::mutex> guard(setMutex);
-    grainStored.add(key.grain);
+    std::lock_guard<std::mutex> guard(accumMutex);
+    accumStored.add(key.grain);
   }
 
   void grainIndexWaveformVisited(const GrainWaveform::Key &key) override {
-    std::lock_guard<std::mutex> guard(setMutex);
-    grainVisited.add(key.grain);
+    std::lock_guard<std::mutex> guard(accumMutex);
+    accumVisited.add(key.grain);
   }
 
   void grainIndexWaveformMissing(const GrainWaveform::Key &key) override {
-    std::lock_guard<std::mutex> guard(setMutex);
-    grainMissing.add(key.grain);
+    std::lock_guard<std::mutex> guard(accumMutex);
+    accumMissing.add(key.grain);
   }
 };
 
@@ -301,25 +302,22 @@ void MapPanel::paint(juce::Graphics &g) {
 }
 
 void MapPanel::resized() { requestNewImage(); }
-void MapPanel::valueChanged(juce::Value &) { requestNewImage(); }
 
-void MapPanel::timerCallback() {
-  bool liveIsEmpty = !live || live->isEmpty();
-  if (!liveIsEmpty || !liveWasEmpty) {
-    repaint();
-  }
-  liveWasEmpty = liveIsEmpty;
-}
-
-void MapPanel::requestNewImage() {
+void MapPanel::valueChanged(juce::Value &) {
+  requestNewImage();
   auto index = processor.grainData.getIndex();
   if (index == nullptr) {
     live = nullptr;
-  } else {
+  } else if (live == nullptr || index != &live->getIndex()) {
     live = std::make_unique<LiveOverlay>(*index);
   }
+}
+
+void MapPanel::timerCallback() { repaint(); }
+
+void MapPanel::requestNewImage() {
   image->requestChange(ImageRender::Request{
-      .index = index,
+      .index = processor.grainData.getIndex(),
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
   });
