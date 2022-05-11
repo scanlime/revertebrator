@@ -119,6 +119,11 @@ public:
     }
   }
 
+  int loadQueueDepth() {
+    std::lock_guard<std::mutex> guard(workMutex);
+    return workQueue.size();
+  }
+
 private:
   std::mutex workMutex;
   std::deque<Job> workQueue;
@@ -467,11 +472,11 @@ GrainData::GrainData(juce::ThreadPool &generalPurposeThreads)
 }
 
 GrainData::~GrainData() {
-  for (auto t : waveformLoaderThreads) {
+  for (auto *t : waveformLoaderThreads) {
     t->signalThreadShouldExit();
     t->notify();
   }
-  for (auto t : waveformLoaderThreads) {
+  for (auto *t : waveformLoaderThreads) {
     t->waitForThreadToExit(-1);
   }
 }
@@ -505,4 +510,18 @@ GrainWaveform::Ptr GrainData::getWaveform(GrainIndex &index,
     return nullptr;
   }
   return cached;
+}
+
+float GrainData::averageLoadQueueDepth() {
+  float totalDepth = 0., totalThreads = 0.;
+  for (auto *t : waveformLoaderThreads) {
+    totalDepth += t->loadQueueDepth();
+    totalThreads += 1.f;
+  }
+  if (totalThreads == 0.f) {
+    jassertfalse;
+    return 0.f;
+  } else {
+    return totalDepth / totalThreads;
+  }
 }

@@ -176,12 +176,13 @@ public:
 
   GrainIndex::Ptr getIndex();
   GrainWaveform::Ptr getWaveform(GrainIndex &, const GrainWaveform::Key &);
+  float averageLoadQueueDepth();
 
 private:
   class IndexLoaderJob;
   class WaveformLoaderThread;
 
-  juce::Atomic<int> waveformThreadSequence;
+  juce::Atomic<int> waveformThreadSequence{0};
   juce::OwnedArray<WaveformLoaderThread> waveformLoaderThreads;
   std::unique_ptr<IndexLoaderJob> indexLoaderJob;
 

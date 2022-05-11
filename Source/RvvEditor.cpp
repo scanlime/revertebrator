@@ -71,11 +71,34 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ParamPanel)
 };
 
+class StatusPanel : public juce::Component, private juce::Timer {
+public:
+  StatusPanel(RvvProcessor &p) : grainData(p.grainData) {
+    timerCallback();
+    addAndMakeVisible(label);
+    startTimer(300);
+  }
+
+  ~StatusPanel() override {}
+
+  void resized() override { label.setBounds(getLocalBounds()); }
+
+private:
+  GrainData &grainData;
+  juce::Label label;
+
+  void timerCallback() override {
+    auto load = grainData.averageLoadQueueDepth();
+    auto text = "Load: " + juce::String(load, 2);
+    label.setText(text, juce::NotificationType::dontSendNotification);
+  }
+};
+
 class DataPanel : public juce::Component,
                   private juce::FilenameComponentListener,
                   private juce::Value::Listener {
 public:
-  DataPanel(RvvProcessor &p) {
+  DataPanel(RvvProcessor &p) : status(p) {
     recentItems = p.state.state.getChildWithName("recent_files");
     juce::StringArray recentStrings;
     for (auto item : recentItems) {
@@ -94,20 +117,24 @@ public:
 
     addAndMakeVisible(info);
     addAndMakeVisible(filename);
+    addAndMakeVisible(status);
   }
 
   void resized() override {
-    juce::FlexBox box;
-    box.flexDirection = juce::FlexBox::Direction::column;
-    box.items.add(juce::FlexItem(filename).withMinHeight(24));
-    box.items.add(juce::FlexItem(info).withFlex(1));
-    box.performLayout(getLocalBounds().toFloat());
+    juce::FlexBox outer, inner;
+    outer.flexDirection = juce::FlexBox::Direction::column;
+    outer.items.add(juce::FlexItem(filename).withMinHeight(24));
+    outer.items.add(juce::FlexItem(inner).withFlex(1));
+    inner.items.add(juce::FlexItem(info).withFlex(1));
+    inner.items.add(juce::FlexItem(status).withMinWidth(80));
+    outer.performLayout(getLocalBounds().toFloat());
   }
 
 private:
   juce::ValueTree recentItems;
   juce::Value grainDataSrc, grainDataStatus;
   juce::Label info;
+  StatusPanel status;
   juce::FilenameComponent filename{
       {}, {}, false, false, false, "*.rvv", "", "Choose grain data..."};
 
