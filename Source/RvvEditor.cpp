@@ -188,13 +188,12 @@ void RvvEditor::resized() {
   FlexBox box;
   box.flexDirection = FlexBox::Direction::column;
   box.items.add(FlexItem(parts->data).withMinHeight(48));
-  box.items.add(FlexItem(parts->map).withFlex(10));
-  box.items.add(FlexItem(parts->wave).withFlex(4));
+  box.items.add(FlexItem(parts->map).withFlex(7));
+  box.items.add(FlexItem(parts->wave).withFlex(3));
   for (auto &part : parts->params) {
-    box.items.add(
-        FlexItem(*part).withMinHeight(70).withFlex(2));
+    box.items.add(FlexItem(*part).withMinHeight(80).withFlex(1));
   }
-  box.items.add(FlexItem(parts->keyboard).withFlex(3));
+  box.items.add(FlexItem(parts->keyboard).withMinHeight(40).withFlex(1));
   box.performLayout(getLocalBounds().toFloat());
   savedWidth = getWidth();
   savedHeight = getHeight();

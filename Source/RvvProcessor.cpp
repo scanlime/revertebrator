@@ -49,15 +49,13 @@ RvvProcessor::RvvProcessor()
             }),
       grainData(generalPurposeThreads), synth(grainData, 128) {
 
-  constexpr auto width = 500;
-  constexpr auto height = 700;
-
   state.state.appendChild({"grain_data", {{"src", ""}}, {}}, nullptr);
   state.state.appendChild({"recent_files", {}, {}}, nullptr);
   state.state.appendChild(
       {
           "editor_window",
-          {{"width", width}, {"height", height}},
+          {{"width", RvvEditor::defaultWidth},
+           {"height", RvvEditor::defaultHeight}},
           {},
       },
       nullptr);
