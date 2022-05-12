@@ -386,7 +386,7 @@ void MapPanel::requestNewImage() {
   });
 }
 
-void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool on) {
+void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool isDown) {
   auto source = e.source.getIndex();
   auto index = processor.grainData.getIndex();
   if (index == nullptr) {
@@ -394,7 +394,7 @@ void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool on) {
   } else {
     Layout layout(getLocalBounds().toFloat(), *index);
     auto point = layout.pointInfo(e.getEventRelativeTo(this).position);
-    processor.mouseInputForGrain(point.grain, on && point.valid, source);
+    processor.mouseInputForGrain(point.grain, isDown && point.valid, source);
   }
 }
 

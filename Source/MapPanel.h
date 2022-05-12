@@ -31,7 +31,7 @@ private:
   std::unique_ptr<LiveOverlay> live;
   juce::Value grainDataStatus;
 
-  void updateGrainUnderMouse(const juce::MouseEvent &, bool on);
+  void updateGrainUnderMouse(const juce::MouseEvent &, bool);
   void requestNewImage();
 
   void timerCallback() override;
