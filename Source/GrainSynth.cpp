@@ -4,6 +4,16 @@ GrainSequence::GrainSequence(GrainIndex &index) : index(index) {}
 
 GrainSequence::~GrainSequence() {}
 
+StationaryGrainSequence::StationaryGrainSequence(GrainIndex &index,
+                                                 const Point &value)
+    : GrainSequence(index), value(value) {}
+
+StationaryGrainSequence::~StationaryGrainSequence() {}
+
+GrainSequence::Point StationaryGrainSequence::generate(std::mt19937 &) {
+  return value;
+}
+
 MidiGrainSequence::MidiGrainSequence(GrainIndex &index, const Params &params,
                                      const Midi &midi)
     : GrainSequence(index), params(params), midi(midi) {}
@@ -31,16 +41,6 @@ GrainSequence::Point MidiGrainSequence::generate(std::mt19937 &prng) {
   return {grain : g, gain : juce::Decibels::decibelsToGain(gainDb)};
 }
 
-StationaryGrainSequence::StationaryGrainSequence(GrainIndex &index,
-                                                 const Point &value)
-    : GrainSequence(index), value(value) {}
-
-StationaryGrainSequence::~StationaryGrainSequence() {}
-
-GrainSequence::Point StationaryGrainSequence::generate(std::mt19937 &) {
-  return value;
-}
-
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
   std::mt19937 seedGenerator;
   for (auto i = 0; i < juce::numElementsInArray(lastModWheelValues); i++) {
@@ -52,6 +52,35 @@ GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
 }
 
 GrainSynth::~GrainSynth() {}
+
+void GrainSynth::mouseInputForGrain(unsigned grainId, bool isDown,
+                                    int sourceId) {
+  juce::ScopedLock sl(lock);
+  auto sound = dynamic_cast<GrainSound *>(getSound(0).get());
+  if (sound == nullptr) {
+    return;
+  }
+  if (isDown && !voiceForInputSource.contains(sourceId)) {
+    voiceForInputSource.set(sourceId, dynamic_cast<GrainVoice *>(findFreeVoice(
+                                          getSound(0).get(), -1, -1, true)));
+  }
+  auto voice = voiceForInputSource[sourceId];
+  if (voice) {
+    if (isDown) {
+      constexpr auto velocity = 0.7f;
+      if (!voice->isVoiceActive()) {
+        // We don't seem to have a direct way to start a juce::SynthesiserVoice
+        // without also triggering a midi note that we need to dequeue.
+        startVoice(voice, sound, 0, 0, 0);
+        voice->clearGrainQueue();
+      }
+      voice->startGrain(grainId, velocity);
+    } else {
+      stopVoice(voice, 0, true);
+      voiceForInputSource.remove(sourceId);
+    }
+  }
+}
 
 void GrainSynth::changeSound(GrainIndex &index,
                              const GrainSound::Params &params) {
@@ -134,12 +163,54 @@ GrainSound::grainSequence(const MidiGrainSequence::Midi &midi) {
   return std::make_unique<MidiGrainSequence>(getIndex(), params.sequence, midi);
 }
 
+GrainSequence::Ptr GrainSound::grainSequence(unsigned grain, float velocity) {
+  auto gainDb = juce::jmap(velocity, params.sequence.gainDbLow,
+                           params.sequence.gainDbHigh);
+  return std::make_unique<StationaryGrainSequence>(
+      getIndex(), GrainSequence::
+      Point{grain : grain, gain : juce::Decibels::decibelsToGain(gainDb)});
+}
+
 GrainVoice::GrainVoice(GrainData &grainData, const std::mt19937 &prng)
     : grainData(grainData), prng(prng) {}
+
 GrainVoice::~GrainVoice() {}
 
 bool GrainVoice::canPlaySound(juce::SynthesiserSound *sound) {
   return dynamic_cast<GrainSound *>(sound) != nullptr;
+}
+
+void GrainVoice::startGrain(unsigned grain, float velocity) {
+  auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
+  if (sound != nullptr) {
+    sequence = sound->grainSequence(grain, velocity);
+    trimAndRefillQueue();
+    trimReservoirToOnlyActiveGrains();
+  }
+}
+
+void GrainVoice::clearGrainQueue() {
+  sampleOffsetInQueue = 0;
+  queue.clear();
+}
+
+void GrainVoice::trimReservoirToOnlyActiveGrains() {
+  reservoir.grains.clear();
+  reservoir.set.clear();
+
+  auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
+  if (sound != nullptr) {
+    auto remaining = numActiveGrainsInQueue(*sound);
+    for (auto &item : queue) {
+      if (remaining > 0) {
+        remaining--;
+        reservoir.set.add(item.seq.grain);
+        reservoir.grains.push_back(item);
+      } else {
+        break;
+      }
+    }
+  }
 }
 
 void GrainVoice::startNote(int midiNote, float velocity,
@@ -153,31 +224,27 @@ void GrainVoice::startNote(int midiNote, float velocity,
         .modWheel = currentModWheelPosition,
         .velocity = velocity,
     });
-    sampleOffsetInQueue = 0;
-    queue.clear();
-    reservoir.clear();
-    reservoirSet.clear();
-    fillQueueForSound(*sound);
-    fetchQueueWaveforms(*sound);
+    clearGrainQueue();
+    trimReservoirToOnlyActiveGrains();
+    if (velocity > 0.f) {
+      fillQueueForSound(*sound);
+      fetchQueueWaveforms(*sound);
+    }
   }
 }
 
 void GrainVoice::stopNote(float, bool) {
   sequence = nullptr;
-  auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
-  if (sound == nullptr) {
-    queue.clear();
-  } else if (queue.size() > 1) {
-    // Truncate off grains that haven't started playing, leaving
-    // only grains that have started and/or the first grain of the sequence.
-    queue.resize(std::max(1, numActiveGrainsInQueue(*sound)));
-  }
+  trimQueueToMinimumLength();
 }
+
+bool GrainVoice::isVoiceActive() const { return !queue.empty(); }
 
 void GrainVoice::pitchWheelMoved(int newValue) {
   auto midiSequence = dynamic_cast<MidiGrainSequence *>(sequence.get());
   if (midiSequence != nullptr) {
     midiSequence->midi.pitchWheel = newValue;
+    trimAndRefillQueue();
   }
 }
 
@@ -187,6 +254,7 @@ void GrainVoice::controllerMoved(int controllerNumber, int newValue) {
     auto midiSequence = dynamic_cast<MidiGrainSequence *>(sequence.get());
     if (midiSequence != nullptr) {
       midiSequence->midi.modWheel = newValue;
+      trimAndRefillQueue();
     }
   }
 }
@@ -259,6 +327,26 @@ int GrainVoice::numActiveGrainsInQueue(const GrainSound &sound) {
   return numActive;
 }
 
+void GrainVoice::trimQueueToMinimumLength() {
+  auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
+  if (sound == nullptr) {
+    queue.clear();
+  } else if (queue.size() > 1) {
+    // Truncate off grains that haven't started playing, leaving
+    // only grains that have started and/or the first grain of the sequence.
+    queue.resize(std::max(1, numActiveGrainsInQueue(*sound)));
+  }
+}
+
+void GrainVoice::trimAndRefillQueue() {
+  trimQueueToMinimumLength();
+  auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
+  if (sound != nullptr) {
+    fillQueueForSound(*sound);
+    fetchQueueWaveforms(*sound);
+  }
+}
+
 void GrainVoice::addListener(Listener *listener) {
   std::lock_guard<std::mutex> guard(listenerMutex);
   listeners.add(listener);
@@ -281,16 +369,15 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
       // The grain we need isn't available yet; put this back on the end
       // of the queue to try again later. For now replace with a recycled grain.
       grainsToRetry.push_back(grain);
-      if (reservoir.size() > 0) {
-        std::uniform_int_distribution<> uniform(0, reservoir.size() - 1);
-        grain = reservoir[uniform(prng)];
-        jassert(grain.wave != nullptr);
-      } else {
+      if (reservoir.grains.empty()) {
         // Just try to stall without advancing the queue. This will be
         // harmless if we are just starting, but if it happens later
         // there will be audio glitches as we repeat a frame.
         return;
       }
+      std::uniform_int_distribution<> uniform(0, reservoir.grains.size() - 1);
+      grain = reservoir.grains[uniform(prng)];
+      jassert(grain.wave != nullptr);
     }
     if (queueTimestamp > (sampleOffsetInQueue + numSamples)) {
       // Happens after the end of this render block
@@ -345,9 +432,9 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
       sampleOffsetInQueue -= queueTimestamp;
       // Temporarily hold on to all unique grains on this voice, to
       // use them as replacements for grains that are still loading.
-      if (!reservoirSet.contains(queue.front().seq.grain)) {
-        reservoirSet.add(queue.front().seq.grain);
-        reservoir.push_back(queue.front());
+      if (!reservoir.set.contains(queue.front().seq.grain)) {
+        reservoir.set.add(queue.front().seq.grain);
+        reservoir.grains.push_back(queue.front());
       }
       queue.pop_front();
     } else {

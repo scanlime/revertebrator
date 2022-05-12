@@ -71,6 +71,7 @@ public:
   int targetQueueDepth() const;
   GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
   GrainSequence::Ptr grainSequence(const MidiGrainSequence::Midi &midi);
+  GrainSequence::Ptr grainSequence(unsigned grain, float velocity);
 
 private:
   GrainIndex::Ptr index;
@@ -89,6 +90,7 @@ public:
   bool canPlaySound(juce::SynthesiserSound *) override;
   void startNote(int, float, juce::SynthesiserSound *, int) override;
   void stopNote(float, bool) override;
+  bool isVoiceActive() const override;
   void pitchWheelMoved(int) override;
   void controllerMoved(int, int) override;
   void renderNextBlock(juce::AudioBuffer<float> &, int, int) override;
@@ -104,15 +106,27 @@ public:
   void addListener(Listener *);
   void removeListener(Listener *);
 
+  void startGrain(unsigned grain, float velocity);
+
+  void clearGrainQueue();
+  void trimReservoirToOnlyActiveGrains();
+
 private:
   struct Grain {
     GrainSequence::Point seq;
     GrainWaveform::Ptr wave;
   };
 
+  struct Reservoir {
+    std::vector<Grain> grains;
+    juce::SortedSet<unsigned> set;
+  };
+
   void fillQueueForSound(const GrainSound &);
   void fetchQueueWaveforms(GrainSound &);
   int numActiveGrainsInQueue(const GrainSound &);
+  void trimQueueToMinimumLength();
+  void trimAndRefillQueue();
   void renderFromQueue(const GrainSound &, juce::AudioBuffer<float> &, int,
                        int);
 
@@ -122,10 +136,9 @@ private:
   juce::ListenerList<Listener> listeners;
 
   std::mt19937 prng;
-  std::unique_ptr<GrainSequence> sequence;
+  GrainSequence::Ptr sequence;
   std::deque<Grain> queue;
-  std::vector<Grain> reservoir;
-  juce::SortedSet<unsigned> reservoirSet;
+  Reservoir reservoir;
 
   int sampleOffsetInQueue{0};
   int currentModWheelPosition{0};
@@ -139,6 +152,7 @@ public:
   ~GrainSynth() override;
 
   void changeSound(GrainIndex &, const GrainSound::Params &);
+  void mouseInputForGrain(unsigned grainId, bool isDown, int sourceId);
 
   void addListener(GrainVoice::Listener *);
   void removeListener(GrainVoice::Listener *);
@@ -148,6 +162,7 @@ public:
 
 private:
   int lastModWheelValues[16];
+  juce::HashMap<int, GrainVoice *> voiceForInputSource;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSynth)
 };

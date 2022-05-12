@@ -3,6 +3,7 @@
 #include "GrainData.h"
 #include "GrainSynth.h"
 #include <JuceHeader.h>
+#include <mutex>
 
 class RvvProcessor : public juce::AudioProcessor,
                      private juce::ValueTree::Listener,
@@ -37,6 +38,8 @@ public:
   void getStateInformation(juce::MemoryBlock &destData) override;
   void setStateInformation(const void *data, int sizeInBytes) override;
 
+  void mouseInputForGrain(unsigned grainId, bool isDown, int sourceId);
+
   juce::AudioProcessorValueTreeState state;
   juce::MidiKeyboardState midiState;
   juce::ThreadPool generalPurposeThreads{2};
@@ -44,13 +47,22 @@ public:
   GrainSynth synth;
 
 private:
+  struct MouseInputItem {
+    unsigned grain;
+    int sourceId;
+    bool isDown;
+  };
+
+  juce::Value grainDataStatus;
+  std::mutex inputQueueMutex;
+  juce::Array<MouseInputItem> inputQueue;
+
+  void processMouseInputQueue();
   void attachToState();
   void updateSoundFromState();
   void valueChanged(juce::Value &) override;
   void valueTreePropertyChanged(juce::ValueTree &,
                                 const juce::Identifier &) override;
-
-  juce::Value grainDataStatus;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RvvProcessor)
 };
