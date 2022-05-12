@@ -128,7 +128,7 @@ public:
     outer.items.add(juce::FlexItem(filename).withMinHeight(24));
     outer.items.add(juce::FlexItem(inner).withFlex(1));
     inner.items.add(juce::FlexItem(info).withFlex(3));
-    inner.items.add(juce::FlexItem(status).withFlex(1));
+    inner.items.add(juce::FlexItem(status).withFlex(1).withMaxWidth(170));
     outer.performLayout(getLocalBounds().toFloat());
   }
 
