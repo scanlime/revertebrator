@@ -383,30 +383,32 @@ GrainWaveformCache::Hasher::operator()(GrainWaveform::Key const &key) const {
 }
 
 void GrainWaveformCache::cleanup(int inactivityThreshold) {
-  printf("cache cleanup todo\n");
-  //   // Let waveform deletion happen without the cache lock held
-  //   std::vector<GrainWaveform::Ptr> wavesToRelease;
-  //   {
-  //     std::vector<GrainWaveform::Key> keysToRemove;
-  //     std::lock_guard<std::mutex> guard(cacheMutex);
-  //
-  //     int cleanupCounter = cacheCleanupCounter;
-  //     cacheCleanupCounter = cleanupCounter + 1;
-  //
-  //     Cache::Iterator iter(cache);
-  //     while (iter.next()) {
-  //       auto value = iter.getValue();
-  //       int itemAge = cleanupCounter - value.cleanupCounter;
-  //       if (itemAge >= inactivityThreshold) {
-  //         keysToRemove.emplace_back(iter.getKey());
-  //         wavesToRelease.emplace_back(value.wave);
-  //       }
-  //     }
-  //     for (auto &key : keysToRemove) {
-  //       cache.remove(key);
-  //     }
-  //   }
-  // }
+  // Let waveform deletion happen without the cache lock held
+  std::vector<GrainWaveform::Ptr> wavesToRelease;
+  {
+    std::vector<GrainWaveform::Key> keysToRemove;
+    std::lock_guard<std::mutex> guard(cacheMutex);
+
+    int sizeOfWavesToRelease = 0;
+    int counter = cleanupCounter;
+    cleanupCounter = counter + 1;
+
+    for (auto &item : map) {
+      int age = counter - item.second.cleanupCounter;
+      if (age >= inactivityThreshold) {
+        auto &wave = item.second.wave;
+        keysToRemove.push_back(item.first);
+        if (wave != nullptr) {
+          wavesToRelease.push_back(wave);
+          sizeOfWavesToRelease += wave->sizeInBytes();
+        }
+      }
+    }
+    for (auto &key : keysToRemove) {
+      map.erase(key);
+    }
+    totalBytes -= sizeOfWavesToRelease;
+  }
 }
 
 void GrainWaveformCache::store(GrainWaveform &wave) {
