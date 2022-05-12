@@ -369,9 +369,9 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
   std::vector<Grain> grainsToRetry;
 
   for (auto &grain : queue) {
+    // If we don't have a waveform loaded yet, save this grain for later
+    // and either stall for more time or replace the grain with another.
     if (grain.wave == nullptr) {
-      // The grain we need isn't available yet; put this back on the end
-      // of the queue to try again later. For now replace with a recycled grain.
       grainsToRetry.push_back(grain);
 
       if (!reservoir.grains.empty()) {
