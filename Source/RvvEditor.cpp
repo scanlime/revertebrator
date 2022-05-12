@@ -80,7 +80,6 @@ public:
   }
 
   ~StatusPanel() override {}
-
   void resized() override { label.setBounds(getLocalBounds()); }
 
 private:
@@ -89,7 +88,10 @@ private:
 
   void timerCallback() override {
     auto load = grainData.averageLoadQueueDepth();
-    auto text = "Load: " + juce::String(load, 2);
+    auto index = grainData.getIndex();
+    auto cached = index == nullptr ? 0 : index->getCacheSizeInBytes();
+    auto text = juce::String(load, 2) + " load, " +
+                juce::String(cached / (1024.0 * 1024.0), 1) + "MB cache";
     label.setText(text, juce::NotificationType::dontSendNotification);
   }
 };
@@ -125,8 +127,8 @@ public:
     outer.flexDirection = juce::FlexBox::Direction::column;
     outer.items.add(juce::FlexItem(filename).withMinHeight(24));
     outer.items.add(juce::FlexItem(inner).withFlex(1));
-    inner.items.add(juce::FlexItem(info).withFlex(1));
-    inner.items.add(juce::FlexItem(status).withMinWidth(80));
+    inner.items.add(juce::FlexItem(info).withFlex(3));
+    inner.items.add(juce::FlexItem(status).withFlex(1));
     outer.performLayout(getLocalBounds().toFloat());
   }
 

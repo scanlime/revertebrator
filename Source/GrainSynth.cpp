@@ -97,6 +97,10 @@ int GrainSound::targetQueueDepth() const {
   return std::ceil(1. + window.range().getLength() * grainRepeatsPerSample());
 }
 
+bool GrainSound::isUsingSameIndex(GrainIndex &ix) const {
+  return &ix == index.get();
+}
+
 GrainWaveform::Key GrainSound::waveformKeyForGrain(unsigned grain) const {
   return {
       .grain = grain,

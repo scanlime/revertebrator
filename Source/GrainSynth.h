@@ -43,6 +43,7 @@ public:
   bool appliesToChannel(int) override;
 
   GrainIndex &getIndex();
+  bool isUsingSameIndex(GrainIndex &ix) const;
   double grainRepeatsPerSample() const;
   int targetQueueDepth() const;
   GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;

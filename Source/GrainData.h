@@ -71,6 +71,10 @@ public:
 
   inline bool isEmpty() const noexcept { return buffer.getNumSamples() == 0; }
 
+  inline juce::int64 sizeInBytes() const noexcept {
+    return buffer.getNumSamples() * buffer.getNumChannels() * sizeof(float);
+  }
+
   Key key;
   juce::AudioBuffer<float> buffer;
 
@@ -136,6 +140,8 @@ public:
   }
 
   juce::String describeToString() const;
+  juce::int64 getCacheSizeInBytes();
+
   void cacheWaveform(GrainWaveform &);
   GrainWaveform::Ptr getCachedWaveformOrInsertEmpty(const GrainWaveform::Key &);
 
@@ -157,6 +163,7 @@ private:
 
   std::mutex cacheMutex;
   juce::HashMap<GrainWaveform::Key, GrainWaveform::Ptr, Hasher> cache;
+  juce::int64 cacheTotalBytes{0};
 
   std::mutex listenerMutex;
   juce::ListenerList<Listener> listeners;

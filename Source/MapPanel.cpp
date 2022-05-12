@@ -67,6 +67,7 @@ public:
   }
 
   inline juce::Rectangle<float> grainRectangle(unsigned grain) const {
+    jassert(grain < index.numGrains());
     unsigned bin = index.binForGrain(grain);
     auto grains = index.grainsForBin(bin);
     return juce::Rectangle<float>::leftTopRightBottom(
@@ -273,23 +274,26 @@ private:
                            juce::Colour color) {
     juce::RectangleList<float> rects;
     for (auto grain : grains) {
-      rects.add(layout.grainRectangle(grain).expanded(2));
+      rects.add(layout.grainRectangle(grain).expanded(1.5f));
     }
     g.setFillType(juce::FillType(color));
     g.fillRectList(rects);
   }
 
   void grainIndexWaveformStored(const GrainWaveform::Key &key) override {
+    jassert(key.grain < index->numGrains());
     std::lock_guard<std::mutex> guard(accumMutex);
     accumStored.add(key.grain);
   }
 
   void grainIndexWaveformVisited(const GrainWaveform::Key &key) override {
+    jassert(key.grain < index->numGrains());
     std::lock_guard<std::mutex> guard(accumMutex);
     accumVisited.add(key.grain);
   }
 
   void grainIndexWaveformMissing(const GrainWaveform::Key &key) override {
+    jassert(key.grain < index->numGrains());
     std::lock_guard<std::mutex> guard(accumMutex);
     accumMissing.add(key.grain);
   }
@@ -297,8 +301,11 @@ private:
   void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
                          int sampleNum) override {
-    std::lock_guard<std::mutex> guard(accumMutex);
-    accumPlaying.add(wave.key.grain);
+    if (sound.isUsingSameIndex(getIndex())) {
+      jassert(wave.key.grain < index->numGrains());
+      std::lock_guard<std::mutex> guard(accumMutex);
+      accumPlaying.add(wave.key.grain);
+    }
   }
 };
 

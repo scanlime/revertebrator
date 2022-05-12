@@ -353,7 +353,10 @@ int GrainIndex::Hasher::generateHash(const GrainWaveform::Key &k,
 void GrainIndex::cacheWaveform(GrainWaveform &wave) {
   {
     std::lock_guard<std::mutex> guard(cacheMutex);
-    cache.set(wave.key, wave);
+    auto &slot = cache.getReference(wave.key);
+    auto prevSize = slot == nullptr ? 0 : slot->sizeInBytes();
+    cacheTotalBytes += wave.sizeInBytes() - prevSize;
+    slot = wave;
   }
   {
     auto key = wave.key;
@@ -403,6 +406,11 @@ juce::String GrainIndex::describeToString() const {
          String(pitchRange().getStart(), 1) + " - " +
          String(pitchRange().getEnd(), 1) + " Hz, " +
          numSamplesToString(numSamples);
+}
+
+juce::int64 GrainIndex::getCacheSizeInBytes() {
+  std::lock_guard<std::mutex> guard(cacheMutex);
+  return cacheTotalBytes;
 }
 
 juce::Result GrainIndex::load() {
