@@ -55,9 +55,9 @@ public:
                               unsigned grain) const {
     // Inverse of Y axis calculation in pointInfo()
     if (grain < grainsForBin.getStart()) {
-      return 0;
-    } else if (grain >= grainsForBin.getEnd()) {
       return bounds.getHeight();
+    } else if (grain >= grainsForBin.getEnd()) {
+      return 0;
     } else {
       auto relY = 1.f - float(grain - grainsForBin.getStart()) /
                             grainsForBin.getLength();
@@ -377,7 +377,7 @@ void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool on) {
   auto index = processor.grainData.getIndex();
   Layout layout(getLocalBounds().toFloat(), *index);
   auto point = layout.pointInfo(e.getEventRelativeTo(this).position);
-  processor.mouseInputForGrain(point.grain, on, source);
+  processor.mouseInputForGrain(point.grain, on && point.valid, source);
 }
 
 void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {

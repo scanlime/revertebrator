@@ -66,7 +66,7 @@ void GrainSynth::mouseInputForGrain(unsigned grainId, bool isDown,
   }
   auto voice = voiceForInputSource[sourceId];
   if (voice) {
-    if (isDown) {
+    if (isDown && grainId < sound->getIndex().numGrains()) {
       constexpr auto velocity = 0.7f;
       if (!voice->isVoiceActive()) {
         // We don't seem to have a direct way to start a juce::SynthesiserVoice
