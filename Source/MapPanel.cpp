@@ -40,14 +40,30 @@ public:
     }
   }
 
-  inline float xCoordForBin(unsigned bin) const {
+  inline float xCoordForBinCenter(unsigned bin) const {
     // Inverse of X axis calculation in pointInfo()
     if (bin < index.numBins()) {
       auto hz = index.binF0[bin];
       auto relX = log(hz / pitchRange.getStart()) / logPitchRatio;
       return bounds.getX() + relX * (bounds.getWidth() - 1);
     } else {
-      return bounds.getWidth();
+      return bounds.getRight();
+    }
+  }
+
+  inline float xCoordLeftOfBin(unsigned bin) const {
+    if (bin > 0) {
+      return (xCoordForBinCenter(bin - 1) + xCoordForBinCenter(bin)) / 2.f;
+    } else {
+      return bounds.getX();
+    }
+  }
+
+  inline float xCoordRightOfBin(unsigned bin) const {
+    if (bin < (index.numBins() - 1)) {
+      return (xCoordForBinCenter(bin + 1) + xCoordForBinCenter(bin)) / 2.f;
+    } else {
+      return bounds.getRight();
     }
   }
 
@@ -71,8 +87,8 @@ public:
     unsigned bin = index.binForGrain(grain);
     auto grains = index.grainsForBin(bin);
     return juce::Rectangle<float>::leftTopRightBottom(
-        xCoordForBin(bin), yCoordForGrain(grains, grain + 1),
-        xCoordForBin(bin + 1), yCoordForGrain(grains, grain));
+        xCoordLeftOfBin(bin), yCoordForGrain(grains, grain + 1),
+        xCoordRightOfBin(bin), yCoordForGrain(grains, grain));
   }
 
 private:
