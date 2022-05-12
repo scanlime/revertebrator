@@ -1,7 +1,9 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <functional>
 #include <mutex>
+#include <unordered_map>
 
 class GrainWaveform : public juce::ReferenceCountedObject {
 public:
@@ -82,6 +84,43 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainWaveform)
 };
 
+class GrainWaveformCache {
+public:
+  class Listener {
+  public:
+    virtual void grainIndexWaveformStored(const GrainWaveform::Key &) = 0;
+    virtual void grainIndexWaveformVisited(const GrainWaveform::Key &) = 0;
+    virtual void grainIndexWaveformMissing(const GrainWaveform::Key &) = 0;
+  };
+
+  void addListener(Listener *);
+  void removeListener(Listener *);
+
+  juce::int64 sizeInBytes();
+  void cleanup(int inactivityThreshold);
+
+  void store(GrainWaveform &);
+  GrainWaveform::Ptr lookupOrInsertEmpty(const GrainWaveform::Key &);
+
+private:
+  struct Item {
+    GrainWaveform::Ptr wave;
+    int cleanupCounter{0};
+  };
+
+  struct Hasher {
+    std::size_t operator()(GrainWaveform::Key const &key) const;
+  };
+
+  std::mutex listenerMutex;
+  juce::ListenerList<Listener> listeners;
+
+  std::mutex cacheMutex;
+  std::unordered_map<GrainWaveform::Key, Item, Hasher> map;
+  juce::int64 totalBytes{0};
+  int cleanupCounter{0};
+};
+
 class GrainIndex : public juce::ReferenceCountedObject {
 public:
   using Ptr = juce::ReferenceCountedObjectPtr<GrainIndex>;
@@ -97,6 +136,7 @@ public:
   juce::Array<float> binF0;
   juce::Array<juce::uint64> grainX;
   juce::Result status;
+  GrainWaveformCache cache;
 
   inline unsigned numBins() const { return binF0.size(); }
   inline unsigned numGrains() const { return grainX.size(); }
@@ -140,34 +180,8 @@ public:
   }
 
   juce::String describeToString() const;
-  juce::int64 getCacheSizeInBytes();
-
-  void cacheWaveform(GrainWaveform &);
-  GrainWaveform::Ptr getCachedWaveformOrInsertEmpty(const GrainWaveform::Key &);
-
-  class Listener {
-  public:
-    virtual void grainIndexWaveformStored(const GrainWaveform::Key &) = 0;
-    virtual void grainIndexWaveformVisited(const GrainWaveform::Key &) = 0;
-    virtual void grainIndexWaveformMissing(const GrainWaveform::Key &) = 0;
-  };
-
-  void addListener(Listener *);
-  void removeListener(Listener *);
 
 private:
-  struct Hasher {
-    int generateHash(const GrainWaveform::Window &, int) const noexcept;
-    int generateHash(const GrainWaveform::Key &, int) const noexcept;
-  };
-
-  std::mutex cacheMutex;
-  juce::HashMap<GrainWaveform::Key, GrainWaveform::Ptr, Hasher> cache;
-  juce::int64 cacheTotalBytes{0};
-
-  std::mutex listenerMutex;
-  juce::ListenerList<Listener> listeners;
-
   juce::Result load();
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainIndex)
@@ -187,11 +201,13 @@ public:
 
 private:
   class IndexLoaderJob;
+  class CacheCleanupJob;
   class WaveformLoaderThread;
 
   juce::Atomic<int> waveformThreadSequence{0};
   juce::OwnedArray<WaveformLoaderThread> waveformLoaderThreads;
   std::unique_ptr<IndexLoaderJob> indexLoaderJob;
+  std::unique_ptr<CacheCleanupJob> cacheCleanupJob;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainData)
 };
