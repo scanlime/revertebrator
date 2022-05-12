@@ -4,6 +4,41 @@
 #include <deque>
 #include <mutex>
 
+class GrainData::CacheCleanupJob : private juce::ThreadPoolJob,
+                                   private juce::Timer {
+  static constexpr int intervalMilliseconds = 1500;
+  static constexpr int inactivityThreshold = 5;
+
+public:
+  CacheCleanupJob(juce::ThreadPool &pool, GrainData &grainData)
+      : ThreadPoolJob("cache-cleanup"), pool(pool), grainData(grainData) {
+    startTimer(intervalMilliseconds);
+  }
+
+  ~CacheCleanupJob() override { pool.waitForJobToFinish(this, -1); }
+
+private:
+  juce::ThreadPool &pool;
+  GrainData &grainData;
+  bool isPending{false};
+
+  void timerCallback() override {
+    if (!isPending) {
+      isPending = true;
+      pool.addJob(this, false);
+    }
+  }
+
+  JobStatus runJob() override {
+    auto index = grainData.getIndex();
+    if (index != nullptr) {
+      index->cache.cleanup(inactivityThreshold);
+    }
+    isPending = false;
+    return JobStatus::jobHasFinished;
+  }
+};
+
 class GrainData::IndexLoaderJob : private juce::ThreadPoolJob,
                                   private juce::Value::Listener {
 public:
@@ -223,7 +258,7 @@ private:
     auto rms = std::sqrt(accum / double(numChannels * range.getLength()));
     wave->buffer.applyGain(1.0 / rms);
 
-    index.cacheWaveform(*wave);
+    index.cache.store(*wave);
   }
 
   static FLAC__StreamDecoderSeekStatus
@@ -326,37 +361,64 @@ GrainWaveform::~GrainWaveform() {}
 GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
 GrainIndex::~GrainIndex() {}
 
-void GrainIndex::addListener(Listener *listener) {
+void GrainWaveformCache::addListener(Listener *listener) {
   std::lock_guard<std::mutex> guard(listenerMutex);
   listeners.add(listener);
 }
 
-void GrainIndex::removeListener(Listener *listener) {
+void GrainWaveformCache::removeListener(Listener *listener) {
   std::lock_guard<std::mutex> guard(listenerMutex);
   listeners.remove(listener);
 }
 
-int GrainIndex::Hasher::generateHash(const GrainWaveform::Window &w,
-                                     int upperLimit) const noexcept {
-  return juce::DefaultHashFunctions::generateHash(
-      int(w.mix * 1024.0) ^ (w.width0 * 2) ^ (w.width1 * 3) ^ w.phase1,
-      upperLimit);
+juce::int64 GrainWaveformCache::sizeInBytes() {
+  std::lock_guard<std::mutex> guard(cacheMutex);
+  return totalBytes;
 }
 
-int GrainIndex::Hasher::generateHash(const GrainWaveform::Key &k,
-                                     int upperLimit) const noexcept {
-  return juce::DefaultHashFunctions::generateHash(
-      k.grain ^ int(k.speedRatio * 1e3) ^ generateHash(k.window, upperLimit),
-      upperLimit);
+std::size_t
+GrainWaveformCache::Hasher::operator()(GrainWaveform::Key const &key) const {
+  return key.grain ^ int(key.speedRatio * 1e3) ^ int(key.window.mix * 3e3) ^
+         (key.window.width0 * 2) ^ (key.window.width1 * 3) ^ key.window.phase1;
 }
 
-void GrainIndex::cacheWaveform(GrainWaveform &wave) {
+void GrainWaveformCache::cleanup(int inactivityThreshold) {
+  // Let waveform deletion happen without the cache lock held
+  std::vector<GrainWaveform::Ptr> wavesToRelease;
+  {
+    std::vector<GrainWaveform::Key> keysToRemove;
+    std::lock_guard<std::mutex> guard(cacheMutex);
+
+    int sizeOfWavesToRelease = 0;
+    int counter = cleanupCounter;
+    cleanupCounter = counter + 1;
+
+    for (auto &item : map) {
+      int age = counter - item.second.cleanupCounter;
+      if (age >= inactivityThreshold) {
+        auto &wave = item.second.wave;
+        keysToRemove.push_back(item.first);
+        if (wave != nullptr) {
+          wavesToRelease.push_back(wave);
+          sizeOfWavesToRelease += wave->sizeInBytes();
+        }
+      }
+    }
+    for (auto &key : keysToRemove) {
+      map.erase(key);
+    }
+    totalBytes -= sizeOfWavesToRelease;
+  }
+}
+
+void GrainWaveformCache::store(GrainWaveform &wave) {
   {
     std::lock_guard<std::mutex> guard(cacheMutex);
-    auto &slot = cache.getReference(wave.key);
-    auto prevSize = slot == nullptr ? 0 : slot->sizeInBytes();
-    cacheTotalBytes += wave.sizeInBytes() - prevSize;
-    slot = wave;
+    auto &slot = map[wave.key];
+    auto prevSize = slot.wave == nullptr ? 0 : slot.wave->sizeInBytes();
+    totalBytes += wave.sizeInBytes() - prevSize;
+    slot.wave = wave;
+    slot.cleanupCounter = cleanupCounter;
   }
   {
     auto key = wave.key;
@@ -366,19 +428,21 @@ void GrainIndex::cacheWaveform(GrainWaveform &wave) {
 }
 
 GrainWaveform::Ptr
-GrainIndex::getCachedWaveformOrInsertEmpty(const GrainWaveform::Key &key) {
+GrainWaveformCache::lookupOrInsertEmpty(const GrainWaveform::Key &key) {
   std::lock_guard<std::mutex> guard(cacheMutex);
-  auto ptr = cache[key];
-  if (ptr) {
-    std::lock_guard<std::mutex> guard(listenerMutex);
-    listeners.call([key](Listener &l) { l.grainIndexWaveformVisited(key); });
-    return ptr;
-  } else {
-    GrainWaveform::Ptr empty = new GrainWaveform(key, 0, 0);
-    cache.set(key, *empty);
+  auto &slot = map[key];
+  slot.cleanupCounter = cleanupCounter;
+
+  if (slot.wave == nullptr) {
+    slot.wave = new GrainWaveform(key, 0, 0);
     std::lock_guard<std::mutex> guard(listenerMutex);
     listeners.call([key](Listener &l) { l.grainIndexWaveformMissing(key); });
     return nullptr;
+
+  } else {
+    std::lock_guard<std::mutex> guard(listenerMutex);
+    listeners.call([key](Listener &l) { l.grainIndexWaveformVisited(key); });
+    return slot.wave;
   }
 }
 
@@ -406,11 +470,6 @@ juce::String GrainIndex::describeToString() const {
          String(pitchRange().getStart(), 1) + " - " +
          String(pitchRange().getEnd(), 1) + " Hz, " +
          numSamplesToString(numSamples);
-}
-
-juce::int64 GrainIndex::getCacheSizeInBytes() {
-  std::lock_guard<std::mutex> guard(cacheMutex);
-  return cacheTotalBytes;
 }
 
 juce::Result GrainIndex::load() {
@@ -469,8 +528,9 @@ juce::Result GrainIndex::load() {
 }
 
 GrainData::GrainData(juce::ThreadPool &generalPurposeThreads)
-    : indexLoaderJob(std::make_unique<IndexLoaderJob>(generalPurposeThreads)) {
-
+    : indexLoaderJob(std::make_unique<IndexLoaderJob>(generalPurposeThreads)),
+      cacheCleanupJob(
+          std::make_unique<CacheCleanupJob>(generalPurposeThreads, *this)) {
   for (auto i = juce::SystemStats::getNumCpus(); i; --i) {
     waveformLoaderThreads.add(new WaveformLoaderThread());
   }
@@ -504,7 +564,7 @@ GrainWaveform::Ptr GrainData::getWaveform(GrainIndex &index,
   jassert(index.isValid());
   jassert(key.grain < index.numGrains());
 
-  auto cached = index.getCachedWaveformOrInsertEmpty(key);
+  auto cached = index.cache.lookupOrInsertEmpty(key);
   if (cached == nullptr) {
     // Totally new item, dispatch it to a rotating worker thread.
     // The cache atomically stored a placeholder to avoid duplicating work.

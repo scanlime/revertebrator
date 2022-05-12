@@ -369,25 +369,33 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
   std::vector<Grain> grainsToRetry;
 
   for (auto &grain : queue) {
+    // If we don't have a waveform loaded yet, save this grain for later
+    // and either stall for more time or replace the grain with another.
     if (grain.wave == nullptr) {
-      // The grain we need isn't available yet; put this back on the end
-      // of the queue to try again later. For now replace with a recycled grain.
       grainsToRetry.push_back(grain);
-      if (reservoir.grains.empty()) {
-        // Just try to stall without advancing the queue. This will be
-        // harmless if we are just starting, but if it happens later
-        // there will be audio glitches as we repeat a frame.
+
+      if (!reservoir.grains.empty()) {
+        // We can replace this grain with one from the Reservoir
+        std::uniform_int_distribution<> uniform(0, reservoir.grains.size() - 1);
+        grain = reservoir.grains[uniform(prng)];
+
+      } else if (queueTimestamp == 0 && sampleOffsetInQueue == 0) {
+        // If we haven't actually started playing yet, we can delay starting
         return;
+
+      } else {
+        // We are already playing and there's a missing grain that overlaps with
+        // grains we are already playing, so we can't just pause. Silence it.
+        auto key = sound.waveformKeyForGrain(grain.seq.grain);
+        grain.wave = new GrainWaveform(key, 0, 0);
       }
-      std::uniform_int_distribution<> uniform(0, reservoir.grains.size() - 1);
-      grain = reservoir.grains[uniform(prng)];
-      jassert(grain.wave != nullptr);
     }
     if (queueTimestamp > (sampleOffsetInQueue + numSamples)) {
       // Happens after the end of this render block
       break;
     }
 
+    jassert(grain.wave != nullptr);
     auto &wave = *grain.wave;
     auto gain = grain.seq.gain;
     auto srcSize = wave.buffer.getNumSamples();

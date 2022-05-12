@@ -89,9 +89,9 @@ private:
   void timerCallback() override {
     auto load = grainData.averageLoadQueueDepth();
     auto index = grainData.getIndex();
-    auto cached = index == nullptr ? 0 : index->getCacheSizeInBytes();
+    auto cached = index == nullptr ? 0 : index->cache.sizeInBytes();
     auto text = juce::String(load, 2) + " load, " +
-                juce::String(cached / (1024.0 * 1024.0), 1) + "MB cache";
+                juce::String(cached / float(1024 * 1024), 1) + "MB cache";
     label.setText(text, juce::NotificationType::dontSendNotification);
   }
 };

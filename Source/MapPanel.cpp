@@ -237,16 +237,16 @@ private:
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImageRender)
 };
 
-class MapPanel::LiveOverlay : private GrainIndex::Listener,
+class MapPanel::LiveOverlay : private GrainWaveformCache::Listener,
                               private GrainVoice::Listener {
 public:
   LiveOverlay(GrainIndex &ix, GrainSynth &synth) : index(ix), synth(synth) {
-    index->addListener(this);
+    index->cache.addListener(this);
     synth.addListener(this);
   }
 
   ~LiveOverlay() {
-    index->removeListener(this);
+    index->cache.removeListener(this);
     synth.removeListener(this);
   }
 
