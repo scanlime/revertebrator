@@ -41,7 +41,6 @@ public:
   }
 
   inline float xCoordForBinCenter(unsigned bin) const {
-    // Inverse of X axis calculation in pointInfo()
     if (bin < index.numBins()) {
       auto hz = index.binF0[bin];
       auto relX = log(hz / pitchRange.getStart()) / logPitchRatio;
@@ -69,7 +68,6 @@ public:
 
   inline float yCoordForGrain(const juce::Range<unsigned> &grainsForBin,
                               unsigned grain) const {
-    // Inverse of Y axis calculation in pointInfo()
     if (grain < grainsForBin.getStart()) {
       return bounds.getHeight();
     } else if (grain >= grainsForBin.getEnd()) {
