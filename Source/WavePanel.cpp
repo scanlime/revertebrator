@@ -29,7 +29,7 @@ void WavePanel::paint(juce::Graphics &g) {
   }
 
   for (auto wave : wavesToDraw) {
-    printf("wave %p\n", wave.ptr.get());
+    // printf("wave %p\n", wave.ptr.get());
   }
 
   g.fillAll(juce::Colour(0x10000000));
