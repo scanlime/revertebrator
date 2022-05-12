@@ -389,9 +389,13 @@ void MapPanel::requestNewImage() {
 void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool on) {
   auto source = e.source.getIndex();
   auto index = processor.grainData.getIndex();
-  Layout layout(getLocalBounds().toFloat(), *index);
-  auto point = layout.pointInfo(e.getEventRelativeTo(this).position);
-  processor.mouseInputForGrain(point.grain, on && point.valid, source);
+  if (index == nullptr) {
+    processor.mouseInputForGrain(0, false, source);
+  } else {
+    Layout layout(getLocalBounds().toFloat(), *index);
+    auto point = layout.pointInfo(e.getEventRelativeTo(this).position);
+    processor.mouseInputForGrain(point.grain, on && point.valid, source);
+  }
 }
 
 void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
