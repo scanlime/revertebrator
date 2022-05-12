@@ -109,7 +109,7 @@ public:
   void startGrain(unsigned grain, float velocity);
 
   void clearGrainQueue();
-  void trimReservoirToOnlyActiveGrains();
+  void replaceReservoirWithQueuedGrains();
 
 private:
   struct Grain {
@@ -120,13 +120,16 @@ private:
   struct Reservoir {
     std::vector<Grain> grains;
     juce::SortedSet<unsigned> set;
+
+    void add(const Grain &);
+    void clear();
   };
 
   void fillQueueForSound(const GrainSound &);
   void fetchQueueWaveforms(GrainSound &);
   int numActiveGrainsInQueue(const GrainSound &);
-  void trimQueueToMinimumLength();
-  void trimAndRefillQueue();
+  void trimQueueToLength(int);
+  void trimAndRefillQueue(int);
   void renderFromQueue(const GrainSound &, juce::AudioBuffer<float> &, int,
                        int);
 

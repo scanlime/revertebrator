@@ -184,8 +184,8 @@ void GrainVoice::startGrain(unsigned grain, float velocity) {
   auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
   if (sound != nullptr) {
     sequence = sound->grainSequence(grain, velocity);
-    trimAndRefillQueue();
-    trimReservoirToOnlyActiveGrains();
+    trimAndRefillQueue(2);
+    replaceReservoirWithQueuedGrains();
   }
 }
 
@@ -194,20 +194,26 @@ void GrainVoice::clearGrainQueue() {
   queue.clear();
 }
 
-void GrainVoice::trimReservoirToOnlyActiveGrains() {
-  reservoir.grains.clear();
-  reservoir.set.clear();
+void GrainVoice::Reservoir::add(const Grain &item) {
+  jassert(item.wave != nullptr);
+  if (!set.contains(item.seq.grain)) {
+    set.add(item.seq.grain);
+    grains.push_back(item);
+  }
+}
 
+void GrainVoice::Reservoir::clear() {
+  set.clear();
+  grains.clear();
+}
+
+void GrainVoice::replaceReservoirWithQueuedGrains() {
+  reservoir.clear();
   auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
   if (sound != nullptr) {
-    auto remaining = numActiveGrainsInQueue(*sound);
     for (auto &item : queue) {
-      if (remaining > 0) {
-        remaining--;
-        reservoir.set.add(item.seq.grain);
-        reservoir.grains.push_back(item);
-      } else {
-        break;
+      if (item.wave != nullptr) {
+        reservoir.add(item);
       }
     }
   }
@@ -225,7 +231,7 @@ void GrainVoice::startNote(int midiNote, float velocity,
         .velocity = velocity,
     });
     clearGrainQueue();
-    trimReservoirToOnlyActiveGrains();
+    reservoir.clear();
     if (velocity > 0.f) {
       fillQueueForSound(*sound);
       fetchQueueWaveforms(*sound);
@@ -235,7 +241,7 @@ void GrainVoice::startNote(int midiNote, float velocity,
 
 void GrainVoice::stopNote(float, bool) {
   sequence = nullptr;
-  trimQueueToMinimumLength();
+  trimQueueToLength(1);
 }
 
 bool GrainVoice::isVoiceActive() const { return !queue.empty(); }
@@ -244,7 +250,7 @@ void GrainVoice::pitchWheelMoved(int newValue) {
   auto midiSequence = dynamic_cast<MidiGrainSequence *>(sequence.get());
   if (midiSequence != nullptr) {
     midiSequence->midi.pitchWheel = newValue;
-    trimAndRefillQueue();
+    trimAndRefillQueue(2);
   }
 }
 
@@ -254,7 +260,7 @@ void GrainVoice::controllerMoved(int controllerNumber, int newValue) {
     auto midiSequence = dynamic_cast<MidiGrainSequence *>(sequence.get());
     if (midiSequence != nullptr) {
       midiSequence->midi.modWheel = newValue;
-      trimAndRefillQueue();
+      trimAndRefillQueue(2);
     }
   }
 }
@@ -327,19 +333,17 @@ int GrainVoice::numActiveGrainsInQueue(const GrainSound &sound) {
   return numActive;
 }
 
-void GrainVoice::trimQueueToMinimumLength() {
+void GrainVoice::trimQueueToLength(int length) {
   auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
   if (sound == nullptr) {
     queue.clear();
-  } else if (queue.size() > 1) {
-    // Truncate off grains that haven't started playing, leaving
-    // only grains that have started and/or the first grain of the sequence.
-    queue.resize(std::max(1, numActiveGrainsInQueue(*sound)));
+  } else if (queue.size() > length) {
+    queue.resize(std::max(length, numActiveGrainsInQueue(*sound)));
   }
 }
 
-void GrainVoice::trimAndRefillQueue() {
-  trimQueueToMinimumLength();
+void GrainVoice::trimAndRefillQueue(int length) {
+  trimQueueToLength(length);
   auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
   if (sound != nullptr) {
     fillQueueForSound(*sound);
@@ -432,10 +436,7 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
       sampleOffsetInQueue -= queueTimestamp;
       // Temporarily hold on to all unique grains on this voice, to
       // use them as replacements for grains that are still loading.
-      if (!reservoir.set.contains(queue.front().seq.grain)) {
-        reservoir.set.add(queue.front().seq.grain);
-        reservoir.grains.push_back(queue.front());
-      }
+      reservoir.add(queue.front());
       queue.pop_front();
     } else {
       // No repeats, we're entirely done
