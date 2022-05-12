@@ -14,6 +14,12 @@ public:
 
   void paint(juce::Graphics &) override;
   void resized() override;
+  void mouseDown(const juce::MouseEvent &) override;
+  void mouseUp(const juce::MouseEvent &) override;
+  void mouseEnter(const juce::MouseEvent &) override;
+  void mouseExit(const juce::MouseEvent &) override;
+  void mouseMove(const juce::MouseEvent &) override;
+  void mouseDrag(const juce::MouseEvent &) override;
 
 private:
   class Layout;
@@ -24,10 +30,11 @@ private:
   std::unique_ptr<ImageRender> image;
   std::unique_ptr<LiveOverlay> live;
   juce::Value grainDataStatus;
-  bool liveWasEmpty{false};
 
-  void timerCallback();
+  void updateGrainUnderMouse(const juce::MouseEvent &, bool on);
   void requestNewImage();
+
+  void timerCallback() override;
   void valueChanged(juce::Value &) override;
   void changeListenerCallback(juce::ChangeBroadcaster *) override;
 

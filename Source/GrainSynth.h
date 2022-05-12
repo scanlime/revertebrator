@@ -5,28 +5,51 @@
 #include <deque>
 #include <random>
 
-struct GrainSequence {
+class GrainSequence {
+public:
   using Ptr = std::unique_ptr<GrainSequence>;
 
-  struct Params {
-    float selCenter, selMod, selSpread;
-    float speedWarp, pitchSpread, pitchBendRange;
-    float gainDbLow, gainDbHigh;
-  };
-  struct Midi {
-    int note, pitchWheel, modWheel;
-    float velocity;
-  };
   struct Point {
     unsigned grain;
     float gain;
   };
 
   GrainIndex::Ptr index;
+
+  GrainSequence(GrainIndex &);
+  virtual ~GrainSequence();
+  virtual Point generate(std::mt19937 &) = 0;
+};
+
+class StationaryGrainSequence : public GrainSequence {
+public:
+  StationaryGrainSequence(GrainIndex &, const Point &);
+  ~StationaryGrainSequence() override;
+  Point generate(std::mt19937 &) override;
+
+private:
+  Point value;
+};
+
+class MidiGrainSequence : public GrainSequence {
+public:
+  struct Params {
+    float selCenter, selMod, selSpread;
+    float speedWarp, pitchSpread, pitchBendRange;
+    float gainDbLow, gainDbHigh;
+  };
+
+  struct Midi {
+    int note, pitchWheel, modWheel;
+    float velocity;
+  };
+
   Params params;
   Midi midi;
 
-  Point generate(std::mt19937 &prng);
+  MidiGrainSequence(GrainIndex &, const Params &, const Midi &);
+  ~MidiGrainSequence() override;
+  Point generate(std::mt19937 &) override;
 };
 
 class GrainSound : public juce::SynthesiserSound {
@@ -34,7 +57,7 @@ public:
   struct Params {
     double sampleRate, grainRate;
     GrainWaveform::Window::Params window;
-    GrainSequence::Params sequence;
+    MidiGrainSequence::Params sequence;
   };
 
   GrainSound(GrainIndex &index, const Params &params);
@@ -47,7 +70,7 @@ public:
   double grainRepeatsPerSample() const;
   int targetQueueDepth() const;
   GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
-  GrainSequence::Ptr grainSequence(const GrainSequence::Midi &midi);
+  GrainSequence::Ptr grainSequence(const MidiGrainSequence::Midi &midi);
 
 private:
   GrainIndex::Ptr index;

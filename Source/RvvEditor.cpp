@@ -197,6 +197,7 @@ RvvEditor::RvvEditor(RvvProcessor &p)
 
   parts->keyboard.setKeyPressBaseOctave(4);
   parts->keyboard.setLowestVisibleKey(3 * 12);
+  parts->keyboard.setVelocity(0.7, true);
 
   auto state = p.state.state.getChildWithName("editor_window");
   savedWidth.referTo(state.getPropertyAsValue("width", nullptr));

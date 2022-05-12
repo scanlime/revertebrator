@@ -1,6 +1,16 @@
 #include "GrainSynth.h"
 
-GrainSequence::Point GrainSequence::generate(std::mt19937 &prng) {
+GrainSequence::GrainSequence(GrainIndex &index) : index(index) {}
+
+GrainSequence::~GrainSequence() {}
+
+MidiGrainSequence::MidiGrainSequence(GrainIndex &index, const Params &params,
+                                     const Midi &midi)
+    : GrainSequence(index), params(params), midi(midi) {}
+
+MidiGrainSequence::~MidiGrainSequence() {}
+
+GrainSequence::Point MidiGrainSequence::generate(std::mt19937 &prng) {
   std::uniform_real_distribution<> uniform(-1., 1.);
   auto selNoise = params.selSpread * uniform(prng);
   auto pitchNoise = params.pitchSpread * uniform(prng);
@@ -19,6 +29,16 @@ GrainSequence::Point GrainSequence::generate(std::mt19937 &prng) {
   auto grains = index->grainsForBin(bin);
   unsigned g = std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
   return {grain : g, gain : juce::Decibels::decibelsToGain(gainDb)};
+}
+
+StationaryGrainSequence::StationaryGrainSequence(GrainIndex &index,
+                                                 const Point &value)
+    : GrainSequence(index), value(value) {}
+
+StationaryGrainSequence::~StationaryGrainSequence() {}
+
+GrainSequence::Point StationaryGrainSequence::generate(std::mt19937 &) {
+  return value;
 }
 
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
@@ -109,9 +129,9 @@ GrainWaveform::Key GrainSound::waveformKeyForGrain(unsigned grain) const {
   };
 }
 
-GrainSequence::Ptr GrainSound::grainSequence(const GrainSequence::Midi &midi) {
-  return std::make_unique<GrainSequence>(
-      GrainSequence{getIndex(), params.sequence, midi});
+GrainSequence::Ptr
+GrainSound::grainSequence(const MidiGrainSequence::Midi &midi) {
+  return std::make_unique<MidiGrainSequence>(getIndex(), params.sequence, midi);
 }
 
 GrainVoice::GrainVoice(GrainData &grainData, const std::mt19937 &prng)
@@ -155,16 +175,18 @@ void GrainVoice::stopNote(float, bool) {
 }
 
 void GrainVoice::pitchWheelMoved(int newValue) {
-  if (sequence != nullptr) {
-    sequence->midi.pitchWheel = newValue;
+  auto midiSequence = dynamic_cast<MidiGrainSequence *>(sequence.get());
+  if (midiSequence != nullptr) {
+    midiSequence->midi.pitchWheel = newValue;
   }
 }
 
 void GrainVoice::controllerMoved(int controllerNumber, int newValue) {
   if (controllerNumber == 0x01) {
     currentModWheelPosition = newValue;
-    if (sequence != nullptr) {
-      sequence->midi.modWheel = newValue;
+    auto midiSequence = dynamic_cast<MidiGrainSequence *>(sequence.get());
+    if (midiSequence != nullptr) {
+      midiSequence->midi.modWheel = newValue;
     }
   }
 }

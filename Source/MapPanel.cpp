@@ -327,8 +327,6 @@ void MapPanel::paint(juce::Graphics &g) {
   }
 }
 
-void MapPanel::resized() { requestNewImage(); }
-
 void MapPanel::valueChanged(juce::Value &) {
   requestNewImage();
   auto index = processor.grainData.getIndex();
@@ -339,7 +337,32 @@ void MapPanel::valueChanged(juce::Value &) {
   }
 }
 
+void MapPanel::resized() { requestNewImage(); }
 void MapPanel::timerCallback() { repaint(); }
+
+void MapPanel::mouseDown(const juce::MouseEvent &e) {
+  updateGrainUnderMouse(e, true);
+}
+
+void MapPanel::mouseUp(const juce::MouseEvent &e) {
+  updateGrainUnderMouse(e, false);
+}
+
+void MapPanel::mouseEnter(const juce::MouseEvent &e) {
+  updateGrainUnderMouse(e, false);
+}
+
+void MapPanel::mouseExit(const juce::MouseEvent &e) {
+  updateGrainUnderMouse(e, false);
+};
+
+void MapPanel::mouseMove(const juce::MouseEvent &e) {
+  updateGrainUnderMouse(e, false);
+};
+
+void MapPanel::mouseDrag(const juce::MouseEvent &e) {
+  updateGrainUnderMouse(e, true);
+}
 
 void MapPanel::requestNewImage() {
   image->requestChange(ImageRender::Request{
@@ -347,6 +370,11 @@ void MapPanel::requestNewImage() {
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
   });
+}
+
+void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool on) {
+  auto source = e.source.getIndex();
+  auto point = e.getEventRelativeTo(this).position;
 }
 
 void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {
