@@ -11,6 +11,7 @@ public:
     state.wave = wave;
     state.gain = gain;
     state.sampleNum = sampleNum;
+    printf("voice %p wave %p sample %d\n", &voice, &wave, sampleNum);
   }
 
   struct WaveState {
@@ -22,7 +23,7 @@ public:
   struct Results {
     using Waves = std::unordered_map<const GrainWaveform *, WaveState>;
     Waves waves;
-    float maxWidth{0};
+    float maxWidth{0.f};
   };
 
   Results collect() {
@@ -58,8 +59,13 @@ private:
 
 class WaveColumns {
 public:
-  WaveColumns(int width, const WaveCollector::Results &collected)
-      : columns(width) {}
+  WaveColumns(int numColumns, const WaveCollector::Results &collected)
+      : columns(numColumns),
+        samplesPerColumn(2 * collected.maxWidth / numColumns) {
+    for (auto &item : collected.waves) {
+      addWave(item.second);
+    }
+  }
 
   void drawToImage(juce::Image &image, int height, juce::Colour background) {
     auto foreground = background.contrasting(1);
@@ -67,18 +73,41 @@ public:
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < columns.size(); x++) {
         auto &column = columns[x];
-        auto c = y == int((1. - column.y) * height) ? foreground : background;
-        bits.setPixelColour(x, y, c);
+        auto c = column.playing || y == int((1. - column.y) * (height - 1));
+        bits.setPixelColour(x, y, c ? foreground : background);
       }
     }
   }
 
 private:
   struct ColumnInfo {
-    float y{0.5f};
+    float y{0.f};
+    bool playing{false};
   };
 
   std::vector<ColumnInfo> columns;
+  float samplesPerColumn;
+
+  void addWave(const WaveCollector::WaveState &state) {
+    auto window = state.wave->key.window;
+    for (auto &pos : state.positionForEachVoice) {
+      int col = (pos + window.range().getStart()) / samplesPerColumn +
+                columns.size() / 2;
+      if (col >= 0 && col < columns.size()) {
+        columns[col].playing = true;
+      }
+    }
+    for (int i = 0; i < columns.size(); i++) {
+      auto x = (i - (columns.size() / 2)) * samplesPerColumn;
+      // columns[i].y += window.evaluate(x);
+      if (x > window.range().getStart() && x < window.range().getEnd()) {
+        auto ix = x - window.range().getStart();
+        if (ix < state.wave->buffer.getNumSamples()) {
+          columns[i].y += state.wave->buffer.getSample(0, ix);
+        }
+      }
+    }
+  }
 };
 
 class WavePanel::ImageRender : public juce::Thread,
