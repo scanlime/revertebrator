@@ -70,6 +70,7 @@ public:
   GrainIndex &getIndex();
   bool isUsingSameIndex(GrainIndex &ix) const;
   double grainRepeatsPerSample() const;
+  double outputSampleRate() const;
   int targetQueueDepth() const;
   float maxGrainWidthSamples() const;
   const GrainWaveform::Window &getWindow() const;

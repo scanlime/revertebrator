@@ -148,6 +148,8 @@ float GrainSound::maxGrainWidthSamples() const {
   return index->maxGrainWidthSamples() / speedRatio;
 }
 
+double GrainSound::outputSampleRate() const { return params.sampleRate; }
+
 double GrainSound::grainRepeatsPerSample() const {
   return params.grainRate / params.sampleRate;
 }

@@ -26,15 +26,30 @@ public:
   }
 
   void run() override {
-    static constexpr int fpsLimit = 30;
+    // Try to run at an adaptive frame rate and draw a corresponding slice
+    // of time, but apply limits: sleep if we are running fast, and clip
+    // the rendered timespan if our frame rate is low.
+    static constexpr float minTimeStep = 1.f / 90.f;
+    static constexpr float maxTimeStep = 1.f / 20.f;
+
+    auto lastTimestamp = juce::Time::getHighResolutionTicks();
     while (!threadShouldExit()) {
-      wait(1000 / fpsLimit);
-      auto nextImage = renderImage();
+      auto timestamp = juce::Time::getHighResolutionTicks();
+      auto timeStep = std::min<float>(
+          maxTimeStep,
+          juce::Time::highResolutionTicksToSeconds(timestamp - lastTimestamp));
+      if (timeStep < minTimeStep) {
+        wait(int(std::ceil((minTimeStep - timeStep) * 5e-4)));
+        continue;
+      }
+      lastTimestamp = timestamp;
+      auto nextImage = renderImage(timeStep);
       {
         std::lock_guard<std::mutex> guard(imageMutex);
         std::swap(image, nextImage);
       }
       sendChangeMessage();
+      wait(-1);
     }
   }
 
@@ -61,20 +76,26 @@ public:
 private:
   struct Collector {
   public:
-    Collector(int numColumns, float samplesPerColumn)
-        : columns(numColumns), samplesPerColumn(samplesPerColumn) {
+    Collector(int numColumns, float samplesPerColumn, int samplesPerTimeStep)
+        : columns(numColumns), samplesPerColumn(samplesPerColumn),
+          samplesPerTimeStep(samplesPerTimeStep) {
       jassert(numColumns >= 1);
       jassert(samplesPerColumn > 0.f);
     }
 
-    int middleColumn() { return columns.size() / 2; }
+    int centerColumn() { return columns.size() / 2; }
 
     void updateVoice(const GrainVoice &voice, GrainWaveform &wave, float gain,
                      int sampleNum) {
-      int x =
-          middleColumn() +
-          (sampleNum + wave.key.window.range().getStart()) / samplesPerColumn;
-      if (x >= 0 && x < columns.size()) {
+      auto x0 = std::max<int>(
+          0, centerColumn() + (sampleNum + wave.key.window.range().getStart()) /
+                                  samplesPerColumn);
+      auto x1 = std::min<int>(columns.size() - 1,
+                              1. + centerColumn() +
+                                  (sampleNum + samplesPerTimeStep +
+                                   wave.key.window.range().getStart()) /
+                                      samplesPerColumn);
+      for (auto x = x0; x < x1; x++) {
         columns[x].playbackGain += gain;
       }
     }
@@ -92,7 +113,7 @@ private:
       g.fillAll(req.background);
       g.setColour(req.highlight);
 
-      g.drawVerticalLine(middleColumn(), 0, height);
+      g.drawVerticalLine(centerColumn(), 0, height);
 
       for (int x = 0; x < columns.size(); x++) {
         if (columns[x].playbackGain > 0.f) {
@@ -110,6 +131,7 @@ private:
 
     std::vector<Column> columns;
     float samplesPerColumn;
+    int samplesPerTimeStep;
   };
 
   GrainSynth &synth;
@@ -129,21 +151,24 @@ private:
     return request;
   }
 
-  std::unique_ptr<juce::Image> renderImage() {
+  std::unique_ptr<juce::Image> renderImage(float timeStep) {
     auto req = latestRequest();
     auto width = req.bounds.getWidth();
     if (width < 1) {
       return nullptr;
     }
     auto latestSound = synth.latestSound();
-    if (latestSound != nullptr) {
-      visualizeSoundSettings(*latestSound);
+    if (latestSound == nullptr) {
+      return nullptr;
     }
+    visualizeSoundSettings(*latestSound);
+    auto samplesPerTimeStep = latestSound->outputSampleRate() * timeStep;
     std::unique_ptr<Collector> cptr;
     {
       std::lock_guard<std::mutex> guard(collectorMutex);
       auto samplesPerColumn = 2.f * maxWidthForNextCollector / width;
-      cptr = std::make_unique<Collector>(width, samplesPerColumn);
+      cptr = std::make_unique<Collector>(width, samplesPerColumn,
+                                         samplesPerTimeStep);
       maxWidthForNextCollector = 0.f;
       std::swap(collector, cptr);
     }
@@ -176,6 +201,7 @@ void WavePanel::resized() {
 void WavePanel::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds().toFloat();
   image->drawLatest(g, bounds);
+  image->notify();
 }
 
 void WavePanel::changeListenerCallback(juce::ChangeBroadcaster *) {
