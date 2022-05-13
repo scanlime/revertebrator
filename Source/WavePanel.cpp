@@ -10,7 +10,7 @@ public:
 
   struct Request {
     juce::Rectangle<int> bounds;
-    juce::Colour background;
+    juce::Colour background, highlight;
   };
 
   void requestChange(const Request &req) {
@@ -90,7 +90,7 @@ private:
                                                  columns.size(), height, false);
       juce::Graphics g(*image);
       g.fillAll(req.background);
-      g.setColour(req.background.contrasting(1));
+      g.setColour(req.highlight);
 
       g.drawVerticalLine(middleColumn(), 0, height);
 
@@ -169,6 +169,7 @@ void WavePanel::resized() {
   image->requestChange(ImageRender::Request{
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
+      .highlight = findColour(juce::Slider::thumbColourId),
   });
 }
 
