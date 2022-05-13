@@ -3,6 +3,8 @@
 
 class WaveCollector {
 public:
+  // fixme: redo this, we actually want to graph everything not just latest-per-voice,
+  //      or grain repeats get too confusing.
   void updateVoice(const GrainVoice &voice, GrainWaveform &wave,
                    float maxGrainWidthSamples, float gain, int sampleNum) {
     std::lock_guard<std::mutex> guard(voicesMutex);
@@ -11,7 +13,6 @@ public:
     state.wave = wave;
     state.gain = gain;
     state.sampleNum = sampleNum;
-    printf("voice %p wave %p sample %d\n", &voice, &wave, sampleNum);
   }
 
   struct WaveState {
