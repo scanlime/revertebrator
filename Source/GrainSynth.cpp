@@ -131,12 +131,16 @@ GrainSound::GrainSound(GrainIndex &index, const Params &params)
     : index(index), params(params),
       speedRatio(index.sampleRate / params.sampleRate *
                  params.sequence.speedWarp),
-      window(index.maxGrainWidthSamples() / speedRatio, params.window) {}
+      window(maxGrainWidthSamples(), params.window) {}
 
 GrainSound::~GrainSound() {}
 bool GrainSound::appliesToNote(int) { return true; }
 bool GrainSound::appliesToChannel(int) { return true; }
 GrainIndex &GrainSound::getIndex() { return *index; }
+
+float GrainSound::maxGrainWidthSamples() const {
+  return index->maxGrainWidthSamples() / speedRatio;
+}
 
 double GrainSound::grainRepeatsPerSample() const {
   return params.grainRate / params.sampleRate;

@@ -3,9 +3,10 @@
 
 class WaveCollector {
 public:
-  void updateVoice(const GrainVoice &voice, GrainWaveform &wave, float gain,
-                   int sampleNum) {
+  void updateVoice(const GrainVoice &voice, GrainWaveform &wave,
+                   float maxGrainWidthSamples, float gain, int sampleNum) {
     std::lock_guard<std::mutex> guard(voicesMutex);
+    maxWidth = std::max(maxWidth, maxGrainWidthSamples);
     auto &state = voices[&voice];
     state.wave = wave;
     state.gain = gain;
@@ -18,22 +19,28 @@ public:
     std::vector<int> positionForEachVoice;
   };
 
-  using Waves = std::unordered_map<const GrainWaveform *, WaveState>;
+  struct Results {
+    using Waves = std::unordered_map<const GrainWaveform *, WaveState>;
+    Waves waves;
+    float maxWidth{0};
+  };
 
-  Waves collect() {
+  Results collect() {
     Voices collectedVoices;
-    Waves collectedWaves;
+    Results results;
     {
       std::lock_guard<std::mutex> guard(voicesMutex);
       collectedVoices.swap(voices);
+      results.maxWidth = maxWidth;
+      maxWidth = 0.f;
     }
     for (auto &voice : collectedVoices) {
-      auto &state = collectedWaves[voice.second.wave.get()];
+      auto &state = results.waves[voice.second.wave.get()];
       state.wave = voice.second.wave;
       state.totalGain += voice.second.gain;
       state.positionForEachVoice.push_back(voice.second.sampleNum);
     }
-    return collectedWaves;
+    return results;
   }
 
 private:
@@ -46,6 +53,32 @@ private:
   using Voices = std::unordered_map<const GrainVoice *, VoiceState>;
   std::mutex voicesMutex;
   Voices voices;
+  float maxWidth{0.f};
+};
+
+class WaveColumns {
+public:
+  WaveColumns(int width, const WaveCollector::Results &collected)
+      : columns(width) {}
+
+  void drawToImage(juce::Image &image, int height, juce::Colour background) {
+    auto foreground = background.contrasting(1);
+    juce::Image::BitmapData bits(image, juce::Image::BitmapData::writeOnly);
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < columns.size(); x++) {
+        auto &column = columns[x];
+        auto c = y == int((1. - column.y) * height) ? foreground : background;
+        bits.setPixelColour(x, y, c);
+      }
+    }
+  }
+
+private:
+  struct ColumnInfo {
+    float y{0.5f};
+  };
+
+  std::vector<ColumnInfo> columns;
 };
 
 class WavePanel::ImageRender : public juce::Thread,
@@ -57,6 +90,7 @@ public:
 
   struct Request {
     juce::Rectangle<int> bounds;
+    juce::Colour background;
   };
 
   void requestChange(const Request &req) {
@@ -87,7 +121,8 @@ public:
   void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
                          int sampleNum) override {
-    waves.updateVoice(voice, wave, seq.gain, sampleNum);
+    waves.updateVoice(voice, wave, sound.maxGrainWidthSamples(), seq.gain,
+                      sampleNum);
   }
 
 private:
@@ -102,35 +137,13 @@ private:
     return request;
   }
 
-  struct ColumnInfo {};
-
   std::unique_ptr<juce::Image> renderImage() {
     auto req = latestRequest();
     auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
     auto image = std::make_unique<juce::Image>(
         juce::Image::RGB, std::max(1, width), std::max(1, height), false);
-
-    auto collectedWaves = waves.collect();
-    std::vector<ColumnInfo> columns(width);
-    for (auto &wave : collectedWaves) {
-      printf("Wave %p, %d positions, gain %f, window %f %d %d %d\n",
-             wave.second.wave.get(), wave.second.positionForEachVoice.size(),
-             wave.second.totalGain, wave.second.wave->key.window.mix,
-             wave.second.wave->key.window.width0,
-             wave.second.wave->key.window.width1,
-             wave.second.wave->key.window.phase1);
-    }
-
-    juce::Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        static int b = 0;
-        b++;
-        auto c = juce::Colour(0xff000000 | b);
-        bits.setPixelColour(x, y, c);
-      }
-    }
-
+    WaveColumns columns(width, waves.collect());
+    columns.drawToImage(*image, height, req.background);
     return image;
   }
 };
@@ -152,6 +165,7 @@ WavePanel::~WavePanel() {
 void WavePanel::resized() {
   image->requestChange(ImageRender::Request{
       .bounds = getLocalBounds(),
+      .background = findColour(juce::ResizableWindow::backgroundColourId),
   });
 }
 

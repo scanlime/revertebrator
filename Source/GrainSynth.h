@@ -69,6 +69,7 @@ public:
   bool isUsingSameIndex(GrainIndex &ix) const;
   double grainRepeatsPerSample() const;
   int targetQueueDepth() const;
+  float maxGrainWidthSamples() const;
   GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
   GrainSequence::Ptr grainSequence(const MidiGrainSequence::Midi &midi);
   GrainSequence::Ptr grainSequence(unsigned grain, float velocity);
@@ -77,6 +78,7 @@ private:
   GrainIndex::Ptr index;
   Params params;
   float speedRatio;
+  float maxWidthSamples;
   GrainWaveform::Window window;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSound)
