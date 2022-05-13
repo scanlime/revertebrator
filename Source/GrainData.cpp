@@ -402,10 +402,13 @@ void GrainWaveformCache::cleanup(int inactivityThreshold) {
       int age = counter - item.second.cleanupCounter;
       if (age >= inactivityThreshold) {
         auto &wave = item.second.wave;
-        keysToRemove.push_back(item.first);
-        if (wave != nullptr) {
-          wavesToRelease.push_back(wave);
-          sizeOfWavesToRelease += wave->sizeInBytes();
+        auto waveRefs = wave == nullptr ? 0 : wave->getReferenceCount();
+        if (waveRefs <= 1) {
+          keysToRemove.push_back(item.first);
+          if (wave != nullptr) {
+            wavesToRelease.push_back(wave);
+            sizeOfWavesToRelease += wave->sizeInBytes();
+          }
         }
       }
     }
