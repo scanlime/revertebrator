@@ -1,116 +1,6 @@
 #include "WavePanel.h"
 #include <unordered_map>
 
-class WaveCollector {
-public:
-  WaveCollector(int numColumns)
-
-  class WaveColumns {
-  public:
-    WaveColumns(int numColumns, const WaveCollector::Results &collected)
-        : columns(numColumns),
-          samplesPerColumn(2 * collected.maxWidth / numColumns) {
-      for (auto &item : collected.waves) {
-        addWave(item.second);
-      }
-    }
-
-    void drawToImage(juce::Image &image, int height, juce::Colour background) {
-      auto foreground = background.contrasting(1);
-      juce::Image::BitmapData bits(image, juce::Image::BitmapData::writeOnly);
-      for (int y = 0; y < height; y++) {
-        for (int x = 0; x < columns.size(); x++) {
-          auto &column = columns[x];
-          auto c = column.playing || y == int((1. - column.y) * (height - 1));
-          bits.setPixelColour(x, y, c ? foreground : background);
-        }
-      }
-    }
-
-  private:
-    struct ColumnInfo {
-      float y{0.f};
-      bool playing{false};
-    };
-
-    std::vector<ColumnInfo> columns;
-    float samplesPerColumn;
-
-    void addWave(const WaveCollector::WaveState &state) {
-      auto window = state.wave->key.window;
-      for (auto &pos : state.positionForEachVoice) {
-        int col = (pos + window.range().getStart()) / samplesPerColumn +
-                  columns.size() / 2;
-        if (col >= 0 && col < columns.size()) {
-          columns[col].playing = true;
-        }
-      }
-      for (int i = 0; i < columns.size(); i++) {
-        auto x = (i - (columns.size() / 2)) * samplesPerColumn;
-        // columns[i].y += window.evaluate(x);
-        if (x > window.range().getStart() && x < window.range().getEnd()) {
-          auto ix = x - window.range().getStart();
-          if (ix < state.wave->buffer.getNumSamples()) {
-            columns[i].y += state.wave->buffer.getSample(0, ix);
-          }
-        }
-      }
-    }
-  };
-
-  void updateVoice(const GrainVoice &voice, GrainWaveform &wave,
-                   float maxGrainWidthSamples, float gain, int sampleNum) {
-    std::lock_guard<std::mutex> guard(voicesMutex);
-    maxWidth = std::max(maxWidth, maxGrainWidthSamples);
-    auto &state = voices[&voice];
-    state.wave = wave;
-    state.gain = gain;
-    state.sampleNum = sampleNum;
-  }
-
-  struct WaveState {
-    GrainWaveform::Ptr wave;
-    float totalGain{0.f};
-    std::vector<int> positionForEachVoice;
-  };
-
-  struct Results {
-    using Waves = std::unordered_map<const GrainWaveform *, WaveState>;
-    Waves waves;
-    float maxWidth{0.f};
-  };
-
-  Results collect() {
-    Voices collectedVoices;
-    Results results;
-    {
-      std::lock_guard<std::mutex> guard(voicesMutex);
-      collectedVoices.swap(voices);
-      results.maxWidth = maxWidth;
-      maxWidth = 0.f;
-    }
-    for (auto &voice : collectedVoices) {
-      auto &state = results.waves[voice.second.wave.get()];
-      state.wave = voice.second.wave;
-      state.totalGain += voice.second.gain;
-      state.positionForEachVoice.push_back(voice.second.sampleNum);
-    }
-    return results;
-  }
-
-private:
-  struct VoiceState {
-    GrainWaveform::Ptr wave;
-    float gain;
-    int sampleNum;
-  };
-
-  using Voices = std::unordered_map<const GrainVoice *, VoiceState>;
-  std::mutex voicesMutex;
-  Voices voices;
-  float maxWidth{0.f};
-};
-
 class WavePanel::ImageRender : public juce::Thread,
                                public juce::ChangeBroadcaster,
                                public GrainVoice::Listener {
@@ -151,23 +41,51 @@ public:
   void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
                          int sampleNum) override {
-    waves.updateVoice(voice, wave, sound.maxGrainWidthSamples(), seq.gain,
-                      sampleNum);
+    auto maxWidth = sound.maxGrainWidthSamples();
+    std::lock_guard<std::mutex> guard(collectorMutex);
+    maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
+    if (collector) {
+      collector->updateVoice(voice, wave, seq.gain, sampleNum);
+    }
   }
 
 private:
+  struct Collector {
+  public:
+    struct Column {
+      float y{0.f};
+      bool playing{false};
+    };
+
+    std::vector<Column> columns;
+    float samplesPerColumn;
+
+    Collector(int numColumns, float samplesPerColumn)
+        : columns(numColumns), samplesPerColumn(samplesPerColumn) {}
+
+    int middleColumn() { return columns.size() / 2; }
+
+    void updateVoice(const GrainVoice &voice, GrainWaveform &wave, float gain,
+                     int sampleNum) {
+      printf("collector goes here, wave %p, %d columns, %f spc\n", &wave,
+             columns.size(), samplesPerColumn);
+    }
+
+    std::unique_ptr<juce::Image> renderImage(const Request &req) {
+      printf("render\n");
+      return nullptr;
+    }
+  };
+
   std::mutex requestMutex;
   Request request;
+
   std::mutex imageMutex;
   std::unique_ptr<juce::Image> image;
 
-// YOU ARE HERE. Moving the 'request' and 'columns' stuff to WaveCollector,
-//   planning on having it wrap up the number of columns and the width scaling
-//   and it can go right from the playing callback to an update in the columns array.
-xxx
-
-  std::unique_ptr<WaveCollector> collector;
-  WaveCollector waves;
+  std::mutex collectorMutex;
+  std::unique_ptr<Collector> collector;
+  float maxWidthForNextCollector{0.f};
 
   Request latestRequest() {
     std::lock_guard<std::mutex> guard(requestMutex);
@@ -176,12 +94,22 @@ xxx
 
   std::unique_ptr<juce::Image> renderImage() {
     auto req = latestRequest();
-    auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
-    auto image = std::make_unique<juce::Image>(
-        juce::Image::RGB, std::max(1, width), std::max(1, height), false);
-    WaveColumns columns(width, waves.collect());
-    columns.drawToImage(*image, height, req.background);
-    return image;
+    auto width = req.bounds.getWidth();
+    if (width < 1) {
+      return nullptr;
+    }
+    auto nextSamplesPerColumn = 2.f * maxWidthForNextCollector / width;
+    auto c = std::make_unique<Collector>(width, nextSamplesPerColumn);
+    maxWidthForNextCollector = 0.f;
+    {
+      std::lock_guard<std::mutex> guard(collectorMutex);
+      std::swap(collector, c);
+    }
+    if (c == nullptr) {
+      return nullptr;
+    } else {
+      return c->renderImage(req);
+    }
   }
 };
 
