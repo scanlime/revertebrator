@@ -254,17 +254,16 @@ public:
 
   void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
     Layout layout(bounds, *index);
-    juce::SortedSet<unsigned> stored, visited, missing, playing;
+    juce::SortedSet<unsigned> visited, playing, startLoading, stopLoading;
     {
-      std::lock_guard<std::mutex> guard(accumMutex);
-      accumStored.swapWith(stored);
-      accumVisited.swapWith(visited);
-      accumMissing.swapWith(missing);
-      accumPlaying.swapWith(playing);
+      std::lock_guard<std::mutex> guard(collector.mutex);
+      visited.swapWith(collector.visited);
+      playing.swapWith(collector.playing);
+      startLoading.swapWith(collector.startLoading);
+      stopLoading.swapWith(collector.stopLoading);
     }
-
-    loading.addSet(missing);
-    loading.removeValuesIn(stored);
+    loading.addSet(startLoading);
+    loading.removeValuesIn(stopLoading);
 
     fillGrainSet(g, layout, playing, juce::Colour(0xAAFFFF00));
     fillGrainSet(g, layout, visited, juce::Colour(0xAA00FF00));
@@ -274,14 +273,11 @@ public:
 private:
   GrainIndex::Ptr index;
   GrainSynth &synth;
-
-  std::mutex accumMutex;
-  juce::SortedSet<unsigned> accumStored;
-  juce::SortedSet<unsigned> accumVisited;
-  juce::SortedSet<unsigned> accumMissing;
-  juce::SortedSet<unsigned> accumPlaying;
-
   juce::SortedSet<unsigned> loading;
+  struct {
+    std::mutex mutex;
+    juce::SortedSet<unsigned> visited, playing, startLoading, stopLoading;
+  } collector;
 
   static void fillGrainSet(juce::Graphics &g, const Layout &layout,
                            juce::SortedSet<unsigned> &grains,
@@ -294,22 +290,28 @@ private:
     g.fillRectList(rects);
   }
 
-  void grainIndexWaveformStored(const GrainWaveform::Key &key) override {
+  void grainWaveformStored(const GrainWaveform::Key &key) override {
     jassert(key.grain < index->numGrains());
-    std::lock_guard<std::mutex> guard(accumMutex);
-    accumStored.add(key.grain);
+    std::lock_guard<std::mutex> guard(collector.mutex);
+    collector.stopLoading.add(key.grain);
   }
 
-  void grainIndexWaveformVisited(const GrainWaveform::Key &key) override {
+  void grainWaveformVisited(const GrainWaveform::Key &key) override {
     jassert(key.grain < index->numGrains());
-    std::lock_guard<std::mutex> guard(accumMutex);
-    accumVisited.add(key.grain);
+    std::lock_guard<std::mutex> guard(collector.mutex);
+    collector.visited.add(key.grain);
   }
 
-  void grainIndexWaveformMissing(const GrainWaveform::Key &key) override {
+  void grainWaveformMissing(const GrainWaveform::Key &key) override {
     jassert(key.grain < index->numGrains());
-    std::lock_guard<std::mutex> guard(accumMutex);
-    accumMissing.add(key.grain);
+    std::lock_guard<std::mutex> guard(collector.mutex);
+    collector.startLoading.add(key.grain);
+  }
+
+  void grainWaveformExpired(const GrainWaveform::Key &key) override {
+    jassert(key.grain < index->numGrains());
+    std::lock_guard<std::mutex> guard(collector.mutex);
+    collector.stopLoading.add(key.grain);
   }
 
   void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
@@ -317,8 +319,8 @@ private:
                          int sampleNum) override {
     if (sound.isUsingSameIndex(getIndex())) {
       jassert(wave.key.grain < index->numGrains());
-      std::lock_guard<std::mutex> guard(accumMutex);
-      accumPlaying.add(wave.key.grain);
+      std::lock_guard<std::mutex> guard(collector.mutex);
+      collector.playing.add(wave.key.grain);
     }
   }
 };

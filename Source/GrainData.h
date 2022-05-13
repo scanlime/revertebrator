@@ -88,9 +88,10 @@ class GrainWaveformCache {
 public:
   class Listener {
   public:
-    virtual void grainIndexWaveformStored(const GrainWaveform::Key &) = 0;
-    virtual void grainIndexWaveformVisited(const GrainWaveform::Key &) = 0;
-    virtual void grainIndexWaveformMissing(const GrainWaveform::Key &) = 0;
+    virtual void grainWaveformStored(const GrainWaveform::Key &) = 0;
+    virtual void grainWaveformVisited(const GrainWaveform::Key &) = 0;
+    virtual void grainWaveformMissing(const GrainWaveform::Key &) = 0;
+    virtual void grainWaveformExpired(const GrainWaveform::Key &) = 0;
   };
 
   void addListener(Listener *);
@@ -101,6 +102,7 @@ public:
 
   void store(GrainWaveform &);
   GrainWaveform::Ptr lookupOrInsertEmpty(const GrainWaveform::Key &);
+  bool contains(const GrainWaveform::Key &);
 
 private:
   struct Item {

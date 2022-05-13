@@ -181,6 +181,11 @@ private:
     GrainIndex &index = *job.index;
     jassert(index.isValid());
 
+    if (!index.cache.contains(job.key)) {
+      // Abandon loading items that have already been deleted from the cache
+      return;
+    }
+
     // (Re)open the input file as necessary
     if (!stream || stream->getFile() != index.file) {
       stream = std::make_unique<juce::FileInputStream>(index.file);
@@ -385,8 +390,8 @@ GrainWaveformCache::Hasher::operator()(GrainWaveform::Key const &key) const {
 void GrainWaveformCache::cleanup(int inactivityThreshold) {
   // Let waveform deletion happen without the cache lock held
   std::vector<GrainWaveform::Ptr> wavesToRelease;
+  std::vector<GrainWaveform::Key> keysToRemove;
   {
-    std::vector<GrainWaveform::Key> keysToRemove;
     std::lock_guard<std::mutex> guard(cacheMutex);
 
     int sizeOfWavesToRelease = 0;
@@ -409,6 +414,17 @@ void GrainWaveformCache::cleanup(int inactivityThreshold) {
     }
     totalBytes -= sizeOfWavesToRelease;
   }
+  {
+    std::lock_guard<std::mutex> guard(listenerMutex);
+    for (auto &key : keysToRemove) {
+      listeners.call([key](Listener &l) { l.grainWaveformExpired(key); });
+    }
+  }
+}
+
+bool GrainWaveformCache::contains(const GrainWaveform::Key &key) {
+  std::lock_guard<std::mutex> guard(cacheMutex);
+  return map.find(key) != map.end();
 }
 
 void GrainWaveformCache::store(GrainWaveform &wave) {
@@ -423,7 +439,7 @@ void GrainWaveformCache::store(GrainWaveform &wave) {
   {
     auto key = wave.key;
     std::lock_guard<std::mutex> guard(listenerMutex);
-    listeners.call([key](Listener &l) { l.grainIndexWaveformStored(key); });
+    listeners.call([key](Listener &l) { l.grainWaveformStored(key); });
   }
 }
 
@@ -436,12 +452,12 @@ GrainWaveformCache::lookupOrInsertEmpty(const GrainWaveform::Key &key) {
   if (slot.wave == nullptr) {
     slot.wave = new GrainWaveform(key, 0, 0);
     std::lock_guard<std::mutex> guard(listenerMutex);
-    listeners.call([key](Listener &l) { l.grainIndexWaveformMissing(key); });
+    listeners.call([key](Listener &l) { l.grainWaveformMissing(key); });
     return nullptr;
 
   } else {
     std::lock_guard<std::mutex> guard(listenerMutex);
-    listeners.call([key](Listener &l) { l.grainIndexWaveformVisited(key); });
+    listeners.call([key](Listener &l) { l.grainWaveformVisited(key); });
     return slot.wave;
   }
 }
