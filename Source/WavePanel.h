@@ -4,9 +4,7 @@
 #include "RvvProcessor.h"
 #include <JuceHeader.h>
 
-class WavePanel : public juce::Component,
-                  private GrainVoice::Listener,
-                  private juce::Timer {
+class WavePanel : public juce::Component, private juce::ChangeListener {
 public:
   WavePanel(RvvProcessor &);
   ~WavePanel() override;
@@ -15,19 +13,12 @@ public:
   void resized() override;
 
 private:
-  struct WaveInfo {
-    using Key = void *;
-    GrainWaveform::Ptr ptr;
-  };
+  class ImageRender;
 
   RvvProcessor &processor;
-  std::mutex wavesMutex;
-  juce::HashMap<WaveInfo::Key, WaveInfo> waves;
+  std::unique_ptr<ImageRender> image;
 
-  void timerCallback() override;
-  void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
-                         GrainWaveform &wave, const GrainSequence::Point &seq,
-                         int sampleNum) override;
+  void changeListenerCallback(juce::ChangeBroadcaster *) override;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WavePanel)
 };

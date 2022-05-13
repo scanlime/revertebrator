@@ -102,7 +102,7 @@ class MapPanel::ImageRender : private juce::ThreadPoolJob,
                               public juce::ChangeBroadcaster {
 public:
   ImageRender(juce::ThreadPool &pool)
-      : ThreadPoolJob("map_image_render"), pool(pool) {}
+      : ThreadPoolJob("map-image"), pool(pool) {}
 
   ~ImageRender() override { pool.waitForJobToFinish(this, -1); }
 
@@ -140,7 +140,7 @@ public:
 
   void drawLatest(juce::Graphics &g, juce::Rectangle<float> location) {
     std::lock_guard<std::mutex> guard(lock);
-    if (image) {
+    if (image != nullptr) {
       g.drawImage(*image, location);
     }
   }
