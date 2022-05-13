@@ -61,14 +61,6 @@ public:
 private:
   struct Collector {
   public:
-    struct Column {
-      float y{0.f};
-      bool playing{false};
-    };
-
-    std::vector<Column> columns;
-    float samplesPerColumn;
-
     Collector(int numColumns, float samplesPerColumn)
         : columns(numColumns), samplesPerColumn(samplesPerColumn) {
       jassert(numColumns >= 1);
@@ -78,26 +70,46 @@ private:
     int middleColumn() { return columns.size() / 2; }
 
     void updateVoice(const GrainVoice &voice, GrainWaveform &wave, float gain,
-                     int sampleNum) {}
+                     int sampleNum) {
+      int x =
+          middleColumn() +
+          (sampleNum + wave.key.window.range().getStart()) / samplesPerColumn;
+      if (x >= 0 && x < columns.size()) {
+        columns[x].playbackGain += gain;
+      }
+    }
 
     void visualizeSoundSettings(const GrainSound &sound) {}
 
     std::unique_ptr<juce::Image> renderImage(const Request &req) {
-      auto height = req.bounds.getWidth();
+      auto height = req.bounds.getHeight();
       if (height < 1) {
         return nullptr;
       }
-
-      printf("collector is rendering, %d columns and %f samples per col\n",
-             columns.size(), samplesPerColumn);
-
       auto image = std::make_unique<juce::Image>(juce::Image::RGB,
                                                  columns.size(), height, false);
-      auto bg = req.background;
-      auto fg = bg.contrasting(1);
+      juce::Graphics g(*image);
+      g.fillAll(req.background);
+      g.setColour(req.background.contrasting(1));
+
+      g.drawVerticalLine(middleColumn(), 0, height);
+
+      for (int x = 0; x < columns.size(); x++) {
+        if (columns[x].playbackGain > 0.f) {
+          g.drawVerticalLine(x, 0, height);
+        }
+      }
 
       return image;
     }
+
+    struct Column {
+      float playbackGain{0.f}, envelope{0.f};
+      juce::Range<float> audioRange;
+    };
+
+    std::vector<Column> columns;
+    float samplesPerColumn;
   };
 
   GrainSynth &synth;
@@ -123,12 +135,10 @@ private:
     if (width < 1) {
       return nullptr;
     }
-
     auto latestSound = synth.latestSound();
     if (latestSound != nullptr) {
       visualizeSoundSettings(*latestSound);
     }
-
     std::unique_ptr<Collector> cptr;
     {
       std::lock_guard<std::mutex> guard(collectorMutex);
