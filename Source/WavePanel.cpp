@@ -3,8 +3,61 @@
 
 class WaveCollector {
 public:
-  // fixme: redo this, we actually want to graph everything not just latest-per-voice,
-  //      or grain repeats get too confusing.
+  WaveCollector(int numColumns)
+
+  class WaveColumns {
+  public:
+    WaveColumns(int numColumns, const WaveCollector::Results &collected)
+        : columns(numColumns),
+          samplesPerColumn(2 * collected.maxWidth / numColumns) {
+      for (auto &item : collected.waves) {
+        addWave(item.second);
+      }
+    }
+
+    void drawToImage(juce::Image &image, int height, juce::Colour background) {
+      auto foreground = background.contrasting(1);
+      juce::Image::BitmapData bits(image, juce::Image::BitmapData::writeOnly);
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < columns.size(); x++) {
+          auto &column = columns[x];
+          auto c = column.playing || y == int((1. - column.y) * (height - 1));
+          bits.setPixelColour(x, y, c ? foreground : background);
+        }
+      }
+    }
+
+  private:
+    struct ColumnInfo {
+      float y{0.f};
+      bool playing{false};
+    };
+
+    std::vector<ColumnInfo> columns;
+    float samplesPerColumn;
+
+    void addWave(const WaveCollector::WaveState &state) {
+      auto window = state.wave->key.window;
+      for (auto &pos : state.positionForEachVoice) {
+        int col = (pos + window.range().getStart()) / samplesPerColumn +
+                  columns.size() / 2;
+        if (col >= 0 && col < columns.size()) {
+          columns[col].playing = true;
+        }
+      }
+      for (int i = 0; i < columns.size(); i++) {
+        auto x = (i - (columns.size() / 2)) * samplesPerColumn;
+        // columns[i].y += window.evaluate(x);
+        if (x > window.range().getStart() && x < window.range().getEnd()) {
+          auto ix = x - window.range().getStart();
+          if (ix < state.wave->buffer.getNumSamples()) {
+            columns[i].y += state.wave->buffer.getSample(0, ix);
+          }
+        }
+      }
+    }
+  };
+
   void updateVoice(const GrainVoice &voice, GrainWaveform &wave,
                    float maxGrainWidthSamples, float gain, int sampleNum) {
     std::lock_guard<std::mutex> guard(voicesMutex);
@@ -58,59 +111,6 @@ private:
   float maxWidth{0.f};
 };
 
-class WaveColumns {
-public:
-  WaveColumns(int numColumns, const WaveCollector::Results &collected)
-      : columns(numColumns),
-        samplesPerColumn(2 * collected.maxWidth / numColumns) {
-    for (auto &item : collected.waves) {
-      addWave(item.second);
-    }
-  }
-
-  void drawToImage(juce::Image &image, int height, juce::Colour background) {
-    auto foreground = background.contrasting(1);
-    juce::Image::BitmapData bits(image, juce::Image::BitmapData::writeOnly);
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < columns.size(); x++) {
-        auto &column = columns[x];
-        auto c = column.playing || y == int((1. - column.y) * (height - 1));
-        bits.setPixelColour(x, y, c ? foreground : background);
-      }
-    }
-  }
-
-private:
-  struct ColumnInfo {
-    float y{0.f};
-    bool playing{false};
-  };
-
-  std::vector<ColumnInfo> columns;
-  float samplesPerColumn;
-
-  void addWave(const WaveCollector::WaveState &state) {
-    auto window = state.wave->key.window;
-    for (auto &pos : state.positionForEachVoice) {
-      int col = (pos + window.range().getStart()) / samplesPerColumn +
-                columns.size() / 2;
-      if (col >= 0 && col < columns.size()) {
-        columns[col].playing = true;
-      }
-    }
-    for (int i = 0; i < columns.size(); i++) {
-      auto x = (i - (columns.size() / 2)) * samplesPerColumn;
-      // columns[i].y += window.evaluate(x);
-      if (x > window.range().getStart() && x < window.range().getEnd()) {
-        auto ix = x - window.range().getStart();
-        if (ix < state.wave->buffer.getNumSamples()) {
-          columns[i].y += state.wave->buffer.getSample(0, ix);
-        }
-      }
-    }
-  }
-};
-
 class WavePanel::ImageRender : public juce::Thread,
                                public juce::ChangeBroadcaster,
                                public GrainVoice::Listener {
@@ -160,6 +160,13 @@ private:
   Request request;
   std::mutex imageMutex;
   std::unique_ptr<juce::Image> image;
+
+// YOU ARE HERE. Moving the 'request' and 'columns' stuff to WaveCollector,
+//   planning on having it wrap up the number of columns and the width scaling
+//   and it can go right from the playing callback to an update in the columns array.
+xxx
+
+  std::unique_ptr<WaveCollector> collector;
   WaveCollector waves;
 
   Request latestRequest() {
