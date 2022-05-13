@@ -26,12 +26,7 @@ public:
   }
 
   void run() override {
-    // Try to run at an adaptive frame rate and draw a corresponding slice
-    // of time, but apply limits: sleep if we are running fast, and clip
-    // the rendered timespan if our frame rate is low.
-    static constexpr float minTimeStep = 1.f / 90.f;
-    static constexpr float maxTimeStep = 1.f / 20.f;
-
+    static constexpr float minTimeStep = 1.f / 30.f, maxTimeStep = 1.f / 10.f;
     auto lastTimestamp = juce::Time::getHighResolutionTicks();
     while (!threadShouldExit()) {
       auto timestamp = juce::Time::getHighResolutionTicks();
@@ -39,16 +34,18 @@ public:
           maxTimeStep,
           juce::Time::highResolutionTicksToSeconds(timestamp - lastTimestamp));
       if (timeStep < minTimeStep) {
-        wait(int(std::ceil((minTimeStep - timeStep) * 5e-4)));
+        wait(int(std::ceil(2e-4 * (minTimeStep - timeStep))));
         continue;
       }
       lastTimestamp = timestamp;
       auto nextImage = renderImage(timeStep);
-      {
-        std::lock_guard<std::mutex> guard(imageMutex);
-        std::swap(image, nextImage);
+      if (nextImage != nullptr) {
+        {
+          std::lock_guard<std::mutex> guard(imageMutex);
+          std::swap(image, nextImage);
+        }
+        sendChangeMessage();
       }
-      sendChangeMessage();
       wait(-1);
     }
   }
@@ -60,7 +57,7 @@ public:
     std::lock_guard<std::mutex> guard(collectorMutex);
     maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
     if (collector) {
-      collector->updateVoice(voice, wave, seq.gain, sampleNum);
+      collector->playing(voice, wave, seq.gain, sampleNum);
     }
   }
 
@@ -85,8 +82,8 @@ private:
 
     int centerColumn() { return columns.size() / 2; }
 
-    void updateVoice(const GrainVoice &voice, GrainWaveform &wave, float gain,
-                     int sampleNum) {
+    void playing(const GrainVoice &voice, GrainWaveform &wave, float gain,
+                 int sampleNum) {
       auto x0 = std::max<int>(
           0, centerColumn() + (sampleNum + wave.key.window.range().getStart()) /
                                   samplesPerColumn);
@@ -100,7 +97,12 @@ private:
       }
     }
 
-    void visualizeSoundSettings(const GrainSound &sound) {}
+    void visualizeSoundSettings(const GrainSound &sound) {
+      for (int x = 0; x < columns.size(); x++) {
+        columns[x].envelope =
+            sound.getWindow().evaluate((x - centerColumn()) * samplesPerColumn);
+      }
+    }
 
     std::unique_ptr<juce::Image> renderImage(const Request &req) {
       auto height = req.bounds.getHeight();
@@ -111,15 +113,29 @@ private:
                                                  columns.size(), height, false);
       juce::Graphics g(*image);
       g.fillAll(req.background);
-      g.setColour(req.highlight);
 
-      g.drawVerticalLine(centerColumn(), 0, height);
-
+      juce::Path path;
+      auto m = 3;
+      for (int x = 0; x < columns.size(); x++) {
+        auto y = m + (height - 1 - m - m) * (1.f - columns[x].envelope);
+        if (x == 0) {
+          path.startNewSubPath(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+      }
+      g.setColour(req.background.contrasting(1.f));
+      g.setOpacity(0.7f);
+      g.strokePath(path, juce::PathStrokeType(0.5f * m));
+      g.setOpacity(0.2f);
       for (int x = 0; x < columns.size(); x++) {
         if (columns[x].playbackGain > 0.f) {
           g.drawVerticalLine(x, 0, height);
         }
       }
+
+      g.setColour(req.highlight);
+      g.drawVerticalLine(centerColumn(), 0, height);
 
       return image;
     }
