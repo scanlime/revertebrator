@@ -54,6 +54,8 @@ public:
 
 class GrainSound : public juce::SynthesiserSound {
 public:
+  using Ptr = juce::ReferenceCountedObjectPtr<GrainSound>;
+
   struct Params {
     double sampleRate, grainRate;
     GrainWaveform::Window::Params window;
@@ -70,6 +72,7 @@ public:
   double grainRepeatsPerSample() const;
   int targetQueueDepth() const;
   float maxGrainWidthSamples() const;
+  const GrainWaveform::Window &getWindow() const;
   GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
   GrainSequence::Ptr grainSequence(const MidiGrainSequence::Midi &midi);
   GrainSequence::Ptr grainSequence(unsigned grain, float velocity);
@@ -157,6 +160,8 @@ public:
   ~GrainSynth() override;
 
   void changeSound(GrainIndex &, const GrainSound::Params &);
+  GrainSound::Ptr latestSound();
+
   void mouseInputForGrain(unsigned grainId, bool isDown, int sourceId);
 
   void addListener(GrainVoice::Listener *);

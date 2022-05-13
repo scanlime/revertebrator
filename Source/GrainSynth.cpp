@@ -82,6 +82,11 @@ void GrainSynth::mouseInputForGrain(unsigned grainId, bool isDown,
   }
 }
 
+GrainSound::Ptr GrainSynth::latestSound() {
+  juce::ScopedLock sl(lock);
+  return dynamic_cast<GrainSound *>(sounds[0].get());
+}
+
 void GrainSynth::changeSound(GrainIndex &index,
                              const GrainSound::Params &params) {
   auto newSound = new GrainSound(index, params);
@@ -137,6 +142,7 @@ GrainSound::~GrainSound() {}
 bool GrainSound::appliesToNote(int) { return true; }
 bool GrainSound::appliesToChannel(int) { return true; }
 GrainIndex &GrainSound::getIndex() { return *index; }
+const GrainWaveform::Window &GrainSound::getWindow() const { return window; }
 
 float GrainSound::maxGrainWidthSamples() const {
   return index->maxGrainWidthSamples() / speedRatio;

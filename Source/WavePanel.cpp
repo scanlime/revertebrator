@@ -5,7 +5,7 @@ class WavePanel::ImageRender : public juce::Thread,
                                public juce::ChangeBroadcaster,
                                public GrainVoice::Listener {
 public:
-  ImageRender() : Thread("wave-image") {}
+  ImageRender(GrainSynth &synth) : Thread("wave-image"), synth(synth) {}
   ~ImageRender() override {}
 
   struct Request {
@@ -26,9 +26,9 @@ public:
   }
 
   void run() override {
-    static constexpr int fps = 20;
+    static constexpr int fpsLimit = 30;
     while (!threadShouldExit()) {
-      wait(1000 / fps);
+      wait(1000 / fpsLimit);
       auto nextImage = renderImage();
       {
         std::lock_guard<std::mutex> guard(imageMutex);
@@ -49,6 +49,15 @@ public:
     }
   }
 
+  void visualizeSoundSettings(const GrainSound &sound) {
+    auto maxWidth = sound.maxGrainWidthSamples();
+    std::lock_guard<std::mutex> guard(collectorMutex);
+    maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
+    if (collector) {
+      collector->visualizeSoundSettings(sound);
+    }
+  }
+
 private:
   struct Collector {
   public:
@@ -61,21 +70,37 @@ private:
     float samplesPerColumn;
 
     Collector(int numColumns, float samplesPerColumn)
-        : columns(numColumns), samplesPerColumn(samplesPerColumn) {}
+        : columns(numColumns), samplesPerColumn(samplesPerColumn) {
+      jassert(numColumns >= 1);
+      jassert(samplesPerColumn > 0.f);
+    }
 
     int middleColumn() { return columns.size() / 2; }
 
     void updateVoice(const GrainVoice &voice, GrainWaveform &wave, float gain,
-                     int sampleNum) {
-      printf("collector goes here, wave %p, %d columns, %f spc\n", &wave,
-             columns.size(), samplesPerColumn);
-    }
+                     int sampleNum) {}
+
+    void visualizeSoundSettings(const GrainSound &sound) {}
 
     std::unique_ptr<juce::Image> renderImage(const Request &req) {
-      printf("render\n");
-      return nullptr;
+      auto height = req.bounds.getWidth();
+      if (height < 1) {
+        return nullptr;
+      }
+
+      printf("collector is rendering, %d columns and %f samples per col\n",
+             columns.size(), samplesPerColumn);
+
+      auto image = std::make_unique<juce::Image>(juce::Image::RGB,
+                                                 columns.size(), height, false);
+      auto bg = req.background;
+      auto fg = bg.contrasting(1);
+
+      return image;
     }
   };
+
+  GrainSynth &synth;
 
   std::mutex requestMutex;
   Request request;
@@ -98,23 +123,26 @@ private:
     if (width < 1) {
       return nullptr;
     }
-    auto nextSamplesPerColumn = 2.f * maxWidthForNextCollector / width;
-    auto c = std::make_unique<Collector>(width, nextSamplesPerColumn);
-    maxWidthForNextCollector = 0.f;
+
+    auto latestSound = synth.latestSound();
+    if (latestSound != nullptr) {
+      visualizeSoundSettings(*latestSound);
+    }
+
+    std::unique_ptr<Collector> cptr;
     {
       std::lock_guard<std::mutex> guard(collectorMutex);
-      std::swap(collector, c);
+      auto samplesPerColumn = 2.f * maxWidthForNextCollector / width;
+      cptr = std::make_unique<Collector>(width, samplesPerColumn);
+      maxWidthForNextCollector = 0.f;
+      std::swap(collector, cptr);
     }
-    if (c == nullptr) {
-      return nullptr;
-    } else {
-      return c->renderImage(req);
-    }
+    return cptr == nullptr ? nullptr : cptr->renderImage(req);
   }
 };
 
 WavePanel::WavePanel(RvvProcessor &p)
-    : processor(p), image(std::make_unique<ImageRender>()) {
+    : processor(p), image(std::make_unique<ImageRender>(processor.synth)) {
   processor.synth.addListener(image.get());
   image->startThread();
   image->addChangeListener(this);
