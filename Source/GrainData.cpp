@@ -133,8 +133,10 @@ public:
 
   void addJob(const Job &j) {
     {
+      // The work queue is actually set up as LIFO so we
+      // prioritize new jobs even if there is a backlog.
       std::lock_guard<std::mutex> guard(workMutex);
-      workQueue.push_back(j);
+      workQueue.push_front(j);
     }
     notify();
   }
