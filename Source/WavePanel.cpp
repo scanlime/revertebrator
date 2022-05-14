@@ -119,8 +119,8 @@ private:
     int centerColumn() const { return numColumns / 2; }
 
     void drawCenterColumn(juce::Graphics &g, int height) {
-      auto thick = height * 0.02f;
-      auto margin = 1;
+      auto thick = 2.5f;
+      auto margin = 1.f;
       auto x = centerColumn();
       g.drawLine(x, margin + thick, x, height - thick - margin, thick);
       g.fillEllipse(x - thick, margin, thick * 2, thick * 2);
