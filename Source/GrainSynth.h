@@ -106,7 +106,7 @@ public:
     virtual void grainVoicePlaying(const GrainVoice &voice,
                                    const GrainSound &sound, GrainWaveform &wave,
                                    const GrainSequence::Point &seq,
-                                   int sampleNum) = 0;
+                                   int sampleNum, int sampleCount) = 0;
   };
 
   void addListener(Listener *);

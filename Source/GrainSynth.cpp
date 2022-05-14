@@ -422,10 +422,10 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
 
     {
       std::lock_guard<std::mutex> guard(listenerMutex);
-      listeners.call(
-          [this, &sound, &wave, seq = grain.seq, relative](Listener &l) {
-            l.grainVoicePlaying(*this, sound, wave, seq, -relative);
-          });
+      listeners.call([this, &sound, &wave, seq = grain.seq, relative,
+                      copySize](Listener &l) {
+        l.grainVoicePlaying(*this, sound, wave, seq, -relative, copySize);
+      });
     }
 
     if (copySize > 0) {

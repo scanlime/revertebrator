@@ -316,7 +316,7 @@ private:
 
   void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
-                         int sampleNum) override {
+                         int sampleNum, int sampleCount) override {
     if (sound.isUsingSameIndex(getIndex())) {
       jassert(wave.key.grain < index->numGrains());
       std::lock_guard<std::mutex> guard(collector.mutex);

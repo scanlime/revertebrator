@@ -15,12 +15,12 @@ public:
 
   void grainVoicePlaying(const GrainVoice &, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
-                         int sampleNum) override {
+                         int sampleNum, int sampleCount) override {
     auto maxWidth = sound.maxGrainWidthSamples();
     std::lock_guard<std::mutex> guard(collectorMutex);
     maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
     if (collector) {
-      collector->playing(wave, seq, sampleNum);
+      collector->playing(wave, seq, sampleNum, sampleCount);
     }
   }
 
@@ -46,19 +46,17 @@ public:
   }
 
   void run() override {
-    static constexpr float minTimeStep = 1.f / 90.f, maxTimeStep = 1.f / 10.f;
+    static constexpr auto maxFrameRate = 30.;
+    auto minTicks = juce::Time::secondsToHighResolutionTicks(1. / maxFrameRate);
     auto lastTimestamp = juce::Time::getHighResolutionTicks();
     while (!threadShouldExit()) {
       auto timestamp = juce::Time::getHighResolutionTicks();
-      auto timeStep = std::min<float>(
-          maxTimeStep,
-          juce::Time::highResolutionTicksToSeconds(timestamp - lastTimestamp));
-      if (timeStep < minTimeStep) {
-        wait(int(std::ceil(2e-4 * (minTimeStep - timeStep))));
+      if (juce::int64(timestamp - lastTimestamp) < minTicks) {
+        wait(1);
         continue;
       }
       lastTimestamp = timestamp;
-      auto nextImage = renderImage(timeStep);
+      auto nextImage = renderImage();
       if (nextImage != nullptr) {
         {
           std::lock_guard<std::mutex> guard(imageMutex);
@@ -131,7 +129,7 @@ private:
     }
 
     void playing(GrainWaveform &wave, const GrainSequence::Point &seq,
-                 int sampleNum) {
+                 int sampleNum, int sampleCount) {
       // Track the playing audio per-waveform
       auto &waveInfo = waves[&wave];
       if (waveInfo.wave == nullptr) {
@@ -141,11 +139,8 @@ private:
       jassert(waveInfo.wave == &wave);
       jassert(waveInfo.coverage.size() == numColumns);
 
-      // Figure out which part of the waveform is covered by this time step
       auto sampleStart = wave.key.window.range().getStart() + sampleNum;
-      auto sampleEnd = sampleStart + samplesPerTimeStep;
-
-      // Convert from waveform samples to graph columns
+      auto sampleEnd = sampleStart + sampleCount;
       waveInfo.addCoverage(
           std::max<float>(0, centerColumn() + sampleStart / samplesPerColumn),
           std::min<float>(numColumns,
@@ -244,7 +239,7 @@ private:
     return request;
   }
 
-  std::unique_ptr<juce::Image> renderImage(float timeStep) {
+  std::unique_ptr<juce::Image> renderImage() {
     auto req = latestRequest();
     auto width = req.bounds.getWidth();
     if (width < 1) {
@@ -255,14 +250,12 @@ private:
       return nullptr;
     }
     visualizeSoundSettings(*latestSound);
-    auto samplesPerTimeStep = int(latestSound->outputSampleRate() * timeStep);
     std::unique_ptr<Collector> cptr;
     {
       std::lock_guard<std::mutex> guard(collectorMutex);
       auto samplesPerColumn = 2.f * maxWidthForNextCollector / width;
       cptr = std::move(std::make_unique<Collector>(Collector{
           .numColumns = width,
-          .samplesPerTimeStep = samplesPerTimeStep,
           .samplesPerColumn = samplesPerColumn,
       }));
       maxWidthForNextCollector = 0.f;
