@@ -256,7 +256,8 @@ public:
     juce::Colour loading, visited, playing, outline;
   };
 
-  void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds, const Colors &colors) {
+  void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds,
+             const Colors &colors) {
     Layout layout(bounds, *index);
     juce::SortedSet<unsigned> visited, playing, startLoading, stopLoading;
     {
@@ -285,7 +286,8 @@ private:
   } collector;
 
   static void drawGrainSet(juce::Graphics &g, const Layout &layout,
-                           juce::SortedSet<unsigned> &grains, juce::Colour fill, juce::Colour outline={}) {
+                           juce::SortedSet<unsigned> &grains, juce::Colour fill,
+                           juce::Colour outline = {}) {
     juce::RectangleList<float> rects;
     for (auto grain : grains) {
       rects.add(layout.grainRectangle(grain).expanded(2.5f));
@@ -346,12 +348,14 @@ void MapPanel::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds().toFloat();
   image->drawLatest(g, bounds);
   if (live) {
-    live->paint(g, bounds, LiveOverlay::Colors{
-      .loading = juce::Colours::orangered.withAlpha(0.5f),
-      .visited = juce::Colours::white.withAlpha(0.75f),
-      .playing = findColour(juce::Slider::thumbColourId),
-      .outline = findColour(juce::ResizableWindow::backgroundColourId),
-    });
+    live->paint(
+        g, bounds,
+        LiveOverlay::Colors{
+            .loading = juce::Colours::orangered.withAlpha(0.5f),
+            .visited = juce::Colours::white.withAlpha(0.75f),
+            .playing = findColour(juce::Slider::thumbColourId),
+            .outline = findColour(juce::ResizableWindow::backgroundColourId),
+        });
   }
 }
 

@@ -174,8 +174,9 @@ struct RvvEditor::Parts {
   Parts(RvvProcessor &p)
       : data(p), map(p), wave(p),
         params({
-            new ParamPanel(p, {"win_width0", "win_width1", "win_phase1",
-                               "win_mix", "speed_warp", "grain_rate", "grain_rate_spread"}),
+            new ParamPanel(p,
+                           {"win_width0", "win_width1", "win_phase1", "win_mix",
+                            "speed_warp", "grain_rate", "grain_rate_spread"}),
             new ParamPanel(p, {"pitch_spread", "pitch_bend_range", "sel_center",
                                "sel_spread", "sel_mod", "gain_db_low",
                                "gain_db_high"}),

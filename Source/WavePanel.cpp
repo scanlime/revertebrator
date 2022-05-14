@@ -62,7 +62,8 @@ public:
 
 private:
   class CoverageFilter {
-    // FIXME: make the coverage map width == number of samples not number of columns,
+    // FIXME: make the coverage map width == number of samples not number of
+    // columns,
     //    and resample once per frame.
   public:
     static constexpr int height = 5;

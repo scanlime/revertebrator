@@ -462,7 +462,8 @@ GrainWaveformCache::lookupOrInsertEmpty(const GrainWaveform::Key &key) {
       result = nullptr;
       dataFound = false;
     } else {
-      // Coming back to a slot we've seen but it may or may not have actual data.
+      // Coming back to a slot we've seen but it may or may not have actual
+      // data.
       result = slot.wave;
       dataFound = result->buffer.getNumSamples() > 0;
     }
