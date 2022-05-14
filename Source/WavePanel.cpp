@@ -46,7 +46,7 @@ public:
   }
 
   void run() override {
-    static constexpr float minTimeStep = 1.f / 30.f, maxTimeStep = 1.f / 10.f;
+    static constexpr float minTimeStep = 1.f / 90.f, maxTimeStep = 1.f / 10.f;
     auto lastTimestamp = juce::Time::getHighResolutionTicks();
     while (!threadShouldExit()) {
       auto timestamp = juce::Time::getHighResolutionTicks();
@@ -93,6 +93,18 @@ private:
           coverage[endFloor] += amount * (end - endFloor);
         }
       }
+
+      void normalizeCoverage() {
+        float peak = 0.f;
+        for (auto value : coverage) {
+          peak = std::max(peak, value);
+        }
+        if (peak > 0.f) {
+          for (auto &value : coverage) {
+            value /= peak;
+          }
+        }
+      }
     };
 
     std::vector<GrainWaveform::Window> windows;
@@ -125,6 +137,23 @@ private:
           seq.gain);
     }
 
+    juce::Path pathForWindow(const GrainWaveform::Window &window, float top,
+                             float bottom) const {
+      juce::Path path;
+      auto peak = window.peakValue();
+      for (int col = 0; col < numColumns; col++) {
+        auto x = (col - centerColumn()) * samplesPerColumn;
+        auto normalized = window.evaluate(x) / peak;
+        auto y = bottom + normalized * (top - bottom);
+        if (col == 0) {
+          path.startNewSubPath(col, y);
+        } else {
+          path.lineTo(col, y);
+        }
+      }
+      return path;
+    }
+
     std::unique_ptr<juce::Image> renderImage(const Request &req) {
       auto height = req.bounds.getHeight();
       if (height < 1) {
@@ -134,30 +163,28 @@ private:
                                                  height, false);
       juce::Graphics g(*image);
       g.fillAll(req.background);
+
       g.setColour(req.background.contrasting(1.f));
-
-      //
-      // juce::Path path;
-      // auto m = 3;
-      // for (int x = 0; x < numColumns; x++) {
-      //   auto y = m + (height - 1 - m - m) * (1.f - columns[x].envelope);
-      //   if (x == 0) {
-      //     path.startNewSubPath(x, y);
-      //   } else {
-      //     path.lineTo(x, y);
-      //   }
-      // }
-      // g.setOpacity(0.7f);
-      // g.strokePath(path, juce::PathStrokeType(0.5f * m));
-
       for (auto &item : waves) {
+        g.setOpacity(0.4f);
+        g.strokePath(pathForWindow(item.second.wave->key.window, 0.1 * height, 0.9 * height),
+                     juce::PathStrokeType(3.5f));
+
+        item.second.normalizeCoverage();
         auto &columns = item.second.coverage;
-        for (int x = 0; x < numColumns; x++) {
-          if (columns[x] > 0.f) {
-            g.setOpacity(std::min<float>(1.f, 10.f * columns[x]));
-            g.drawVerticalLine(x, 0, height);
+        for (int col = 0; col < numColumns; col++) {
+          if (columns[col] > 0.f) {
+            g.setOpacity(std::min<float>(1.f, 0.5f * columns[col]));
+            g.drawVerticalLine(col, 0, height);
           }
         }
+      }
+
+      g.setColour(req.highlight);
+      for (auto &window : windows) {
+        g.setOpacity(0.4f);
+        g.strokePath(pathForWindow(window, 0.1 * height, 0.9 * height),
+                     juce::PathStrokeType(3.5f));
       }
 
       g.setColour(req.highlight);

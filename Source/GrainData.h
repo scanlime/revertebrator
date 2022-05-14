@@ -39,6 +39,10 @@ public:
       return win0 * (1.f - mix) + win1 * mix;
     }
 
+    inline float peakValue() const noexcept {
+      return std::max(evaluate(0), evaluate(phase1));
+    }
+
     inline bool operator==(const Window &o) const noexcept {
       return mix == o.mix && width0 == o.width0 && width1 == o.width1 &&
              phase1 == o.phase1;
