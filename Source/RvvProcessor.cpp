@@ -23,6 +23,9 @@ RvvProcessor::RvvProcessor()
                     "grain_rate", "Grain Hz",
                     juce::NormalisableRange<float>(0.0f, 200.0f), 10.f),
                 std::make_unique<juce::AudioParameterFloat>(
+                    "grain_rate_spread", "R Spread",
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.f),
+                std::make_unique<juce::AudioParameterFloat>(
                     "speed_warp", "Speed",
                     juce::NormalisableRange<float>(0.1f, 2.0f), 1.f),
                 std::make_unique<juce::AudioParameterFloat>(
