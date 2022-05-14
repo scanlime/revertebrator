@@ -347,8 +347,8 @@ void MapPanel::paint(juce::Graphics &g) {
   image->drawLatest(g, bounds);
   if (live) {
     live->paint(g, bounds, LiveOverlay::Colors{
-      .loading = juce::Colour(0x66ff2200),
-      .visited = juce::Colour(0xbbffffff),
+      .loading = juce::Colours::orangered.withAlpha(0.5f),
+      .visited = juce::Colours::white.withAlpha(0.75f),
       .playing = findColour(juce::Slider::thumbColourId),
       .outline = findColour(juce::ResizableWindow::backgroundColourId),
     });
