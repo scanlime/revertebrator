@@ -46,16 +46,8 @@ public:
   }
 
   void run() override {
-    static constexpr auto maxFrameRate = 30.;
-    auto minTicks = juce::Time::secondsToHighResolutionTicks(1. / maxFrameRate);
-    auto lastTimestamp = juce::Time::getHighResolutionTicks();
+    static constexpr int approxFrameRateLimit = 90;
     while (!threadShouldExit()) {
-      auto timestamp = juce::Time::getHighResolutionTicks();
-      if (juce::int64(timestamp - lastTimestamp) < minTicks) {
-        wait(1);
-        continue;
-      }
-      lastTimestamp = timestamp;
       auto nextImage = renderImage();
       if (nextImage != nullptr) {
         {
@@ -64,11 +56,59 @@ public:
         }
         sendChangeMessage();
       }
-      wait(-1);
+      wait(1000 / approxFrameRateLimit);
     }
   }
 
 private:
+  struct CoverageMask {
+    static constexpr int height = 4;
+    static constexpr int border = 1;
+    static constexpr float persistence = 0.7f;
+
+    void nextFrame() {
+      printf("cov %p next\n", this);
+      for (auto &value : accumulator) {
+        value *= persistence;
+      }
+    }
+
+    void add(const std::vector<float> &coverage) {
+      printf("cov %p add %p\n", this, &coverage);
+      accumulator.resize(coverage.size());
+      for (int i = 0; i < accumulator.size(); i++) {
+        accumulator[i] += coverage[i];
+      }
+    }
+
+    juce::Image &toImage() {
+      printf("cov %p draw\n", this);
+      if (image.isNull() || image.getWidth() != accumulator.size()) {
+        image = juce::Image(juce::Image::SingleChannel, accumulator.size(),
+                            height, true);
+      }
+      juce::Image::BitmapData bits(image, juce::Image::BitmapData::writeOnly);
+
+      float peak = 0.f;
+      for (auto value : accumulator) {
+        peak = std::max(peak, value);
+      }
+      float normalize = peak > 0.f ? 255.f / peak : 0.f;
+
+      for (int x = 0; x < accumulator.size(); x++) {
+        juce::uint8 alpha = std::round(accumulator[x] * normalize);
+        for (int y = border; y < height - border; y++) {
+          bits.setPixelColour(x, y, juce::Colour().withAlpha(alpha));
+        }
+      }
+      return image;
+    }
+
+  private:
+    std::vector<float> accumulator;
+    juce::Image image;
+  };
+
   class Collector {
   public:
     struct WaveInfo {
@@ -90,24 +130,6 @@ private:
             endFloor < coverage.size()) {
           coverage[endFloor] += amount * (end - endFloor);
         }
-      }
-
-      juce::Image coverageMaskImage() {
-        float peak = 0.f;
-        for (auto value : coverage) {
-          peak = std::max(peak, value);
-        }
-        float normalize = peak > 0.f ? 1.f / peak : 0.f;
-        const int height = 10;
-        const auto format = juce::Image::SingleChannel;
-        juce::Image result(format, coverage.size(), height, true);
-        juce::Graphics g(result);
-        for (int x = 0; x < coverage.size(); x++) {
-          juce::uint8 alpha = std::round(coverage[x] * 255.f / peak);
-          g.setColour(juce::Colour().withAlpha(alpha));
-          g.drawVerticalLine(x, 1, height - 1);
-        }
-        return std::move(result);
       }
     };
 
@@ -179,7 +201,8 @@ private:
       return result;
     }
 
-    std::unique_ptr<juce::Image> renderImage(const Request &req) {
+    std::unique_ptr<juce::Image> renderImage(const Request &req,
+                                             CoverageMask &coverageMask) {
       auto height = req.bounds.getHeight();
       if (height < 1) {
         return nullptr;
@@ -188,22 +211,21 @@ private:
                                                  height, false);
 
       juce::Graphics g(*image);
-      g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
       g.fillAll(req.background);
       g.setColour(req.background.contrasting(1.f));
+
+      // Coverage (antialiased playback positions) for active waveforms
+      for (auto &item : waves) {
+        coverageMask.add(item.second.coverage);
+      }
+      g.setOpacity(0.5f);
+      g.drawImage(coverageMask.toImage(), 0, 0, numColumns, height, 0, 0,
+                  numColumns, coverageMask.height, true);
 
       // Faint outline of all active window functions
       for (auto window : collectUniqueWaveformWindows()) {
         g.setOpacity(0.2f);
         g.strokePath(pathForWindow(window, height), juce::PathStrokeType(2.f));
-      }
-
-      // Coverage (antialiased playback positions) for active waveforms
-      for (auto &item : waves) {
-        g.setOpacity(0.5f);
-        auto mask = item.second.coverageMaskImage();
-        g.drawImage(mask, 0, 0, numColumns, height, 0, 0, numColumns,
-                    mask.getHeight(), true);
       }
 
       // Hilighted window functions
@@ -223,6 +245,7 @@ private:
   };
 
   GrainSynth &synth;
+  CoverageMask coverageMask;
 
   std::mutex requestMutex;
   Request request;
@@ -240,6 +263,7 @@ private:
   }
 
   std::unique_ptr<juce::Image> renderImage() {
+    coverageMask.nextFrame();
     auto req = latestRequest();
     auto width = req.bounds.getWidth();
     if (width < 1) {
@@ -261,7 +285,7 @@ private:
       maxWidthForNextCollector = 0.f;
       std::swap(collector, cptr);
     }
-    return cptr == nullptr ? nullptr : cptr->renderImage(req);
+    return cptr == nullptr ? nullptr : cptr->renderImage(req, coverageMask);
   }
 };
 
@@ -290,7 +314,6 @@ void WavePanel::resized() {
 void WavePanel::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds().toFloat();
   image->drawLatest(g, bounds);
-  image->notify();
 }
 
 void WavePanel::changeListenerCallback(juce::ChangeBroadcaster *) {
