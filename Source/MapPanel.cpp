@@ -265,9 +265,9 @@ public:
     loading.addSet(startLoading);
     loading.removeValuesIn(stopLoading);
 
-    fillGrainSet(g, layout, loading, juce::Colour(0xAAFF0000));
-    fillGrainSet(g, layout, playing, juce::Colour(0xAAFFFF00));
-    fillGrainSet(g, layout, visited, juce::Colour(0xAA00FF00));
+    fillGrainSet(g, layout, loading, juce::Colour(0x55FF0000));
+    fillGrainSet(g, layout, visited, juce::Colour(0x5500FF00));
+    fillGrainSet(g, layout, playing, juce::Colour(0x99FFFF00));
   }
 
 private:
@@ -284,7 +284,7 @@ private:
                            juce::Colour color) {
     juce::RectangleList<float> rects;
     for (auto grain : grains) {
-      rects.add(layout.grainRectangle(grain).expanded(1.5f));
+      rects.add(layout.grainRectangle(grain).expanded(2.5f));
     }
     g.setFillType(juce::FillType(color));
     g.fillRectList(rects);
@@ -296,16 +296,15 @@ private:
     collector.stopLoading.add(key.grain);
   }
 
-  void grainWaveformVisited(const GrainWaveform::Key &key) override {
+  void grainWaveformLookup(const GrainWaveform::Key &key,
+                           bool dataFound) override {
     jassert(key.grain < index->numGrains());
     std::lock_guard<std::mutex> guard(collector.mutex);
-    collector.visited.add(key.grain);
-  }
-
-  void grainWaveformMissing(const GrainWaveform::Key &key) override {
-    jassert(key.grain < index->numGrains());
-    std::lock_guard<std::mutex> guard(collector.mutex);
-    collector.startLoading.add(key.grain);
+    if (dataFound) {
+      collector.visited.add(key.grain);
+    } else {
+      collector.startLoading.add(key.grain);
+    }
   }
 
   void grainWaveformExpired(const GrainWaveform::Key &key) override {
