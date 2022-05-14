@@ -46,7 +46,7 @@ public:
   }
 
   void run() override {
-    static constexpr int approxFrameRateLimit = 90;
+    static constexpr int approxFrameRateLimit = 30;
     while (!threadShouldExit()) {
       auto nextImage = renderImage();
       if (nextImage != nullptr) {
