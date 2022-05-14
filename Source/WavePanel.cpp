@@ -71,11 +71,28 @@ public:
   }
 
 private:
-  struct Collector {
+  class Collector {
   public:
     struct WaveInfo {
       GrainWaveform::Ptr wave;
-      juce::Image coverage;
+      std::vector<float> coverage;
+
+      void addCoverage(float start, float end, float amount) {
+        int startFloor = std::floor(start), startCeil = std::ceil(start);
+        int endFloor = std::floor(end), endCeil = std::ceil(end);
+        if (startFloor != startCeil && startFloor >= 0 &&
+            startFloor < coverage.size()) {
+          coverage[startFloor] += amount * (startCeil - start);
+        }
+        for (int x = std::max<int>(0, startCeil);
+             x < std::min<int>(coverage.size(), endFloor); x++) {
+          coverage[x] += amount;
+        }
+        if (endFloor != endCeil && endFloor >= 0 &&
+            endFloor < coverage.size()) {
+          coverage[endFloor] += amount * (end - endFloor);
+        }
+      }
     };
 
     std::vector<GrainWaveform::Window> windows;
@@ -85,31 +102,27 @@ private:
 
     int centerColumn() const { return numColumns / 2; }
 
-    void waveInfo(GrainWaveform &wave) {
-      auto &slot = waves[&wave];
-      if (slot.wave == nullptr) {
-        slot.wave = &wave;
-        slot.coverage =
-            juce::Image(juce::Image::SingleChannel, numColumns, 1, true);
-      }
-      jassert(slot.wave == &wave);
-      jassert(slot.coverage.getWidth() == numColumns);
-    }
-
     void playing(GrainWaveform &wave, const GrainSequence::Point &seq,
                  int sampleNum) {
-      // auto x0 = std::max<int>(
-      //     0, centerColumn() + (sampleNum +
-      //     wave.key.window.range().getStart()) /
-      //                             samplesPerColumn);
-      // auto x1 = std::min<int>(columns.size() - 1,
-      //                         1. + centerColumn() +
-      //                             (sampleNum + samplesPerTimeStep +
-      //                              wave.key.window.range().getStart()) /
-      //                                 samplesPerColumn);
-      // for (auto x = x0; x < x1; x++) {
-      //   columns[x].playbackGain += seq.gain;
-      // }
+      // Track the playing audio per-waveform
+      auto &waveInfo = waves[&wave];
+      if (waveInfo.wave == nullptr) {
+        waveInfo.wave = &wave;
+        waveInfo.coverage.resize(numColumns);
+      }
+      jassert(waveInfo.wave == &wave);
+      jassert(waveInfo.coverage.size() == numColumns);
+
+      // Figure out which part of the waveform is covered by this time step
+      auto sampleStart = wave.key.window.range().getStart() + sampleNum;
+      auto sampleEnd = sampleStart + samplesPerTimeStep;
+
+      // Convert from waveform samples to graph columns
+      waveInfo.addCoverage(
+          std::max<float>(0, centerColumn() + sampleStart / samplesPerColumn),
+          std::min<float>(numColumns,
+                          centerColumn() + sampleEnd / samplesPerColumn),
+          seq.gain);
     }
 
     std::unique_ptr<juce::Image> renderImage(const Request &req) {
@@ -121,6 +134,8 @@ private:
                                                  height, false);
       juce::Graphics g(*image);
       g.fillAll(req.background);
+      g.setColour(req.background.contrasting(1.f));
+
       //
       // juce::Path path;
       // auto m = 3;
@@ -132,15 +147,18 @@ private:
       //     path.lineTo(x, y);
       //   }
       // }
-      // g.setColour(req.background.contrasting(1.f));
       // g.setOpacity(0.7f);
       // g.strokePath(path, juce::PathStrokeType(0.5f * m));
-      // g.setOpacity(0.2f);
-      // for (int x = 0; x < numColumns; x++) {
-      //   if (columns[x].playbackGain > 0.f) {
-      //     g.drawVerticalLine(x, 0, height);
-      //   }
-      // }
+
+      for (auto &item : waves) {
+        auto &columns = item.second.coverage;
+        for (int x = 0; x < numColumns; x++) {
+          if (columns[x] > 0.f) {
+            g.setOpacity(std::min<float>(1.f, 10.f * columns[x]));
+            g.drawVerticalLine(x, 0, height);
+          }
+        }
+      }
 
       g.setColour(req.highlight);
       g.drawVerticalLine(centerColumn(), 0, height);
