@@ -450,21 +450,30 @@ void GrainWaveformCache::store(GrainWaveform &wave) {
 
 GrainWaveform::Ptr
 GrainWaveformCache::lookupOrInsertEmpty(const GrainWaveform::Key &key) {
-  std::lock_guard<std::mutex> guard(cacheMutex);
-  auto &slot = map[key];
-  slot.cleanupCounter = cleanupCounter;
-
-  if (slot.wave == nullptr) {
-    slot.wave = new GrainWaveform(key, 0, 0);
-    std::lock_guard<std::mutex> guard(listenerMutex);
-    listeners.call([key](Listener &l) { l.grainWaveformMissing(key); });
-    return nullptr;
-
-  } else {
-    std::lock_guard<std::mutex> guard(listenerMutex);
-    listeners.call([key](Listener &l) { l.grainWaveformVisited(key); });
-    return slot.wave;
+  GrainWaveform::Ptr result;
+  bool dataFound;
+  {
+    std::lock_guard<std::mutex> guard(cacheMutex);
+    auto &slot = map[key];
+    slot.cleanupCounter = cleanupCounter;
+    if (slot.wave == nullptr) {
+      // First time visiting this slot: insert a marker and return null
+      slot.wave = new GrainWaveform(key, 0, 0);
+      result = nullptr;
+      dataFound = false;
+    } else {
+      // Coming back to a slot we've seen but it may or may not have actual data.
+      result = slot.wave;
+      dataFound = result->buffer.getNumSamples() > 0;
+    }
   }
+  {
+    std::lock_guard<std::mutex> guard(listenerMutex);
+    listeners.call([key, dataFound](Listener &l) {
+      l.grainWaveformLookup(key, dataFound);
+    });
+  }
+  return result;
 }
 
 static juce::String numSamplesToString(juce::uint64 samples) {

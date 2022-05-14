@@ -93,9 +93,8 @@ public:
   class Listener {
   public:
     virtual void grainWaveformStored(const GrainWaveform::Key &) = 0;
-    virtual void grainWaveformVisited(const GrainWaveform::Key &) = 0;
-    virtual void grainWaveformMissing(const GrainWaveform::Key &) = 0;
     virtual void grainWaveformExpired(const GrainWaveform::Key &) = 0;
+    virtual void grainWaveformLookup(const GrainWaveform::Key &, bool dataFound) = 0;
   };
 
   void addListener(Listener *);
