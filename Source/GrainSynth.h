@@ -123,12 +123,18 @@ private:
     GrainWaveform::Ptr wave;
   };
 
-  struct Reservoir {
-    std::vector<Grain> grains;
-    juce::SortedSet<unsigned> set;
-
+  class Reservoir {
+  public:
+    Reservoir();
     void add(const Grain &);
     void clear();
+    bool empty() const;
+    const Grain &choose(std::mt19937 &) const;
+
+  private:
+    std::deque<Grain> grains;
+    juce::SortedSet<unsigned> set;
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Reservoir);
   };
 
   void fillQueueForSound(const GrainSound &);

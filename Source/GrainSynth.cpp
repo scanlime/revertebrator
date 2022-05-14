@@ -206,17 +206,31 @@ void GrainVoice::clearGrainQueue() {
   queue.clear();
 }
 
+GrainVoice::Reservoir::Reservoir() {}
+
 void GrainVoice::Reservoir::add(const Grain &item) {
+  static constexpr int sizeLimit = 32;
   jassert(item.wave != nullptr);
   if (!set.contains(item.seq.grain)) {
     set.add(item.seq.grain);
     grains.push_back(item);
+    while (grains.size() > sizeLimit) {
+      grains.pop_front();
+    }
   }
 }
 
 void GrainVoice::Reservoir::clear() {
   set.clear();
   grains.clear();
+}
+
+bool GrainVoice::Reservoir::empty() const { return grains.empty(); }
+
+const GrainVoice::Grain &
+GrainVoice::Reservoir::choose(std::mt19937 &prng) const {
+  std::uniform_int_distribution<> uniform(0, grains.size() - 1);
+  return grains[uniform(prng)];
 }
 
 void GrainVoice::replaceReservoirWithQueuedGrains() {
@@ -389,10 +403,9 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
     if (grain.wave == nullptr) {
       grainsToRetry.push_back(grain);
 
-      if (!reservoir.grains.empty()) {
+      if (!reservoir.empty()) {
         // We can replace this grain with one from the Reservoir
-        std::uniform_int_distribution<> uniform(0, reservoir.grains.size() - 1);
-        grain = reservoir.grains[uniform(prng)];
+        grain = reservoir.choose(prng);
 
       } else if (queueTimestamp == 0 && sampleOffsetInQueue == 0) {
         // If we haven't actually started playing yet, we can delay starting
