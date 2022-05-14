@@ -62,19 +62,17 @@ public:
 
 private:
   struct CoverageMask {
-    static constexpr int height = 4;
+    static constexpr int height = 5;
     static constexpr int border = 1;
     static constexpr float persistence = 0.7f;
 
     void nextFrame() {
-      printf("cov %p next\n", this);
       for (auto &value : accumulator) {
         value *= persistence;
       }
     }
 
     void add(const std::vector<float> &coverage) {
-      printf("cov %p add %p\n", this, &coverage);
       accumulator.resize(coverage.size());
       for (int i = 0; i < accumulator.size(); i++) {
         accumulator[i] += coverage[i];
@@ -82,7 +80,6 @@ private:
     }
 
     juce::Image &toImage() {
-      printf("cov %p draw\n", this);
       if (image.isNull() || image.getWidth() != accumulator.size()) {
         image = juce::Image(juce::Image::SingleChannel, accumulator.size(),
                             height, true);
@@ -93,7 +90,7 @@ private:
       for (auto value : accumulator) {
         peak = std::max(peak, value);
       }
-      float normalize = peak > 0.f ? 255.f / peak : 0.f;
+      float normalize = std::min(1e6f, peak > 0.f ? 255.f / peak : 0.f);
 
       for (int x = 0; x < accumulator.size(); x++) {
         juce::uint8 alpha = std::round(accumulator[x] * normalize);
@@ -152,6 +149,10 @@ private:
 
     void playing(GrainWaveform &wave, const GrainSequence::Point &seq,
                  int sampleNum, int sampleCount) {
+      if (sampleCount < 1) {
+        // This is a stand-in for a grain that couldn't be loaded in time
+        return;
+      }
       // Track the playing audio per-waveform
       auto &waveInfo = waves[&wave];
       if (waveInfo.wave == nullptr) {
@@ -218,7 +219,7 @@ private:
       for (auto &item : waves) {
         coverageMask.add(item.second.coverage);
       }
-      g.setOpacity(0.5f);
+      g.setOpacity(0.7f);
       g.drawImage(coverageMask.toImage(), 0, 0, numColumns, height, 0, 0,
                   numColumns, coverageMask.height, true);
 
@@ -228,7 +229,7 @@ private:
         g.strokePath(pathForWindow(window, height), juce::PathStrokeType(2.f));
       }
 
-      // Hilighted window functions
+      // Highlighted window functions
       g.setColour(req.highlight);
       for (auto &window : windows) {
         g.setOpacity(0.4f);
@@ -237,7 +238,6 @@ private:
 
       // Hilighted center column
       g.setColour(req.highlight);
-      g.setOpacity(1.f);
       drawCenterColumn(g, height);
 
       return image;
