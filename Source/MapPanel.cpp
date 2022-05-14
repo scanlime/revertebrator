@@ -265,9 +265,9 @@ public:
     loading.addSet(startLoading);
     loading.removeValuesIn(stopLoading);
 
+    fillGrainSet(g, layout, loading, juce::Colour(0xAAFF0000));
     fillGrainSet(g, layout, playing, juce::Colour(0xAAFFFF00));
     fillGrainSet(g, layout, visited, juce::Colour(0xAA00FF00));
-    fillGrainSet(g, layout, loading, juce::Colour(0xAAFF0000));
   }
 
 private:
