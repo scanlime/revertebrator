@@ -252,7 +252,11 @@ public:
 
   GrainIndex &getIndex() { return *index; }
 
-  void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds) {
+  struct Colors {
+    juce::Colour loading, visited, playing;
+  };
+
+  void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds, const Colors &colors) {
     Layout layout(bounds, *index);
     juce::SortedSet<unsigned> visited, playing, startLoading, stopLoading;
     {
@@ -264,10 +268,9 @@ public:
     }
     loading.addSet(startLoading);
     loading.removeValuesIn(stopLoading);
-
-    fillGrainSet(g, layout, loading, juce::Colour(0x55FF0000));
-    fillGrainSet(g, layout, visited, juce::Colour(0x5500FF00));
-    fillGrainSet(g, layout, playing, juce::Colour(0x99FFFF00));
+    fillGrainSet(g, layout, loading, colors.loading);
+    fillGrainSet(g, layout, visited, colors.visited);
+    fillGrainSet(g, layout, playing, colors.playing);
   }
 
 private:
@@ -338,7 +341,11 @@ void MapPanel::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds().toFloat();
   image->drawLatest(g, bounds);
   if (live) {
-    live->paint(g, bounds);
+    live->paint(g, bounds, LiveOverlay::Colors{
+      .loading = juce::Colour(0x55FF0000),
+      .visited = findColour(juce::ResizableWindow::backgroundColourId).contrasting(1.f).withAlpha(0.5f),
+      .playing = findColour(juce::Slider::thumbColourId),
+    });
   }
 }
 
