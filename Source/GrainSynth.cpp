@@ -197,7 +197,6 @@ void GrainVoice::startGrain(unsigned grain, float velocity) {
   if (sound != nullptr) {
     sequence = sound->grainSequence(grain, velocity);
     trimAndRefillQueue(2);
-    replaceReservoirWithQueuedGrains();
   }
 }
 
@@ -231,18 +230,6 @@ const GrainVoice::Grain &
 GrainVoice::Reservoir::choose(std::mt19937 &prng) const {
   std::uniform_int_distribution<> uniform(0, grains.size() - 1);
   return grains[uniform(prng)];
-}
-
-void GrainVoice::replaceReservoirWithQueuedGrains() {
-  reservoir.clear();
-  auto sound = dynamic_cast<GrainSound *>(getCurrentlyPlayingSound().get());
-  if (sound != nullptr) {
-    for (auto &item : queue) {
-      if (item.wave != nullptr) {
-        reservoir.add(item);
-      }
-    }
-  }
 }
 
 void GrainVoice::startNote(int midiNote, float velocity,
