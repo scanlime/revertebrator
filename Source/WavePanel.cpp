@@ -61,28 +61,29 @@ public:
   }
 
 private:
-  struct CoverageMask {
+  class CoverageFilter {
+  public:
     static constexpr int height = 5;
     static constexpr int border = 1;
-    static constexpr float persistence = 0.7f;
+    static constexpr float persistence = 0.75f;
+    static constexpr float gainAdjustmentRate = 1e-2;
 
-    void nextFrame() {
-      for (auto &value : accumulator) {
-        value *= persistence;
-      }
-    }
+    CoverageFilter() {}
 
     void add(const std::vector<float> &coverage) {
-      accumulator.resize(coverage.size());
+      if (coverage.size() != accumulator.size()) {
+        accumulator.clear();
+        accumulator.resize(coverage.size());
+      }
       for (int i = 0; i < accumulator.size(); i++) {
         accumulator[i] += coverage[i];
       }
     }
 
-    juce::Image &toImage() {
+    juce::Image &renderImage() {
       if (image.isNull() || image.getWidth() != accumulator.size()) {
-        image = juce::Image(juce::Image::SingleChannel, accumulator.size(),
-                            height, true);
+        image = juce::Image(juce::Image::SingleChannel,
+                            std::max<int>(1, accumulator.size()), height, true);
       }
       juce::Image::BitmapData bits(image, juce::Image::BitmapData::writeOnly);
 
@@ -90,20 +91,27 @@ private:
       for (auto value : accumulator) {
         peak = std::max(peak, value);
       }
-      float normalize = std::min(1e6f, peak > 0.f ? 255.f / peak : 0.f);
-
+      float targetGain = std::min(1e6f, peak > 0.f ? 255.f / peak : 0.f);
+      gain += (targetGain - gain) * gainAdjustmentRate;
       for (int x = 0; x < accumulator.size(); x++) {
-        juce::uint8 alpha = std::round(accumulator[x] * normalize);
+        juce::uint8 alpha =
+            juce::jlimit<int>(0, 255, std::round(accumulator[x] * gain));
         for (int y = border; y < height - border; y++) {
           bits.setPixelColour(x, y, juce::Colour().withAlpha(alpha));
         }
+      }
+      for (auto &value : accumulator) {
+        value *= persistence;
       }
       return image;
     }
 
   private:
     std::vector<float> accumulator;
+    float gain{0.};
     juce::Image image;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CoverageFilter)
   };
 
   class Collector {
@@ -134,6 +142,10 @@ private:
     std::unordered_map<GrainWaveform *, WaveInfo> waves;
     int numColumns, samplesPerTimeStep;
     float samplesPerColumn;
+
+    Collector(int numColumns, float maxGrainWidthSamples)
+        : numColumns(numColumns),
+          samplesPerColumn(2.f * maxGrainWidthSamples / numColumns) {}
 
     int centerColumn() const { return numColumns / 2; }
 
@@ -203,7 +215,7 @@ private:
     }
 
     std::unique_ptr<juce::Image> renderImage(const Request &req,
-                                             CoverageMask &coverageMask) {
+                                             CoverageFilter &coverage) {
       auto height = req.bounds.getHeight();
       if (height < 1) {
         return nullptr;
@@ -217,11 +229,11 @@ private:
 
       // Coverage (antialiased playback positions) for active waveforms
       for (auto &item : waves) {
-        coverageMask.add(item.second.coverage);
+        coverage.add(item.second.coverage);
       }
       g.setOpacity(0.7f);
-      g.drawImage(coverageMask.toImage(), 0, 0, numColumns, height, 0, 0,
-                  numColumns, coverageMask.height, true);
+      g.drawImage(coverage.renderImage(), 0, 0, numColumns, height, 0, 0,
+                  numColumns, coverage.height, true);
 
       // Faint outline of all active window functions
       for (auto window : collectUniqueWaveformWindows()) {
@@ -242,10 +254,12 @@ private:
 
       return image;
     }
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Collector)
   };
 
   GrainSynth &synth;
-  CoverageMask coverageMask;
+  CoverageFilter coverage;
 
   std::mutex requestMutex;
   Request request;
@@ -263,7 +277,6 @@ private:
   }
 
   std::unique_ptr<juce::Image> renderImage() {
-    coverageMask.nextFrame();
     auto req = latestRequest();
     auto width = req.bounds.getWidth();
     if (width < 1) {
@@ -277,16 +290,14 @@ private:
     std::unique_ptr<Collector> cptr;
     {
       std::lock_guard<std::mutex> guard(collectorMutex);
-      auto samplesPerColumn = 2.f * maxWidthForNextCollector / width;
-      cptr = std::move(std::make_unique<Collector>(Collector{
-          .numColumns = width,
-          .samplesPerColumn = samplesPerColumn,
-      }));
+      cptr = std::make_unique<Collector>(width, maxWidthForNextCollector);
       maxWidthForNextCollector = 0.f;
       std::swap(collector, cptr);
     }
-    return cptr == nullptr ? nullptr : cptr->renderImage(req, coverageMask);
+    return cptr == nullptr ? nullptr : cptr->renderImage(req, coverage);
   }
+
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImageRender)
 };
 
 WavePanel::WavePanel(RvvProcessor &p)
