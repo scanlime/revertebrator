@@ -9,7 +9,7 @@ RvvProcessor::RvvProcessor()
             {
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_width0", "Win A",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
+                    juce::NormalisableRange<float>(0.01f, 1.0f), 0.1f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_width1", "Win B",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
