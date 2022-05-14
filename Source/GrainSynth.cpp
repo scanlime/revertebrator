@@ -307,6 +307,9 @@ void GrainVoice::fetchQueueWaveforms(GrainSound &sound) {
     if (grain.wave == nullptr) {
       grain.wave = grainData.getWaveform(
           sound.getIndex(), sound.waveformKeyForGrain(grain.seq.grain));
+      if (grain.wave != nullptr) {
+        reservoir.add(grain);
+      }
     }
   }
 }
@@ -393,10 +396,6 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
 
       } else if (queueTimestamp == 0 && sampleOffsetInQueue == 0) {
         // If we haven't actually started playing yet, we can delay starting
-        // FIXME: now that the grains load in LIFO order, this can block
-        //         on an early grain / empty reservoir even if later grains
-        //         in the queue have loaded. can we fix this by filling our
-        //         reservoir earlier?
         return;
 
       } else {
@@ -458,9 +457,6 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
     int queueTimestamp = 0;
     if (timestampForNextRepeat(queueTimestamp, repeatRate)) {
       sampleOffsetInQueue -= queueTimestamp;
-      // Temporarily hold on to all unique grains on this voice, to
-      // use them as replacements for grains that are still loading.
-      reservoir.add(queue.front());
       queue.pop_front();
     } else {
       // No repeats, we're entirely done
