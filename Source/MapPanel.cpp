@@ -253,7 +253,7 @@ public:
   GrainIndex &getIndex() { return *index; }
 
   struct Colors {
-    juce::Colour loading, visited, playing;
+    juce::Colour loading, visited, playing, outline;
   };
 
   void paint(juce::Graphics &g, const juce::Rectangle<float> &bounds, const Colors &colors) {
@@ -266,11 +266,13 @@ public:
       startLoading.swapWith(collector.startLoading);
       stopLoading.swapWith(collector.stopLoading);
     }
+
     loading.addSet(startLoading);
     loading.removeValuesIn(stopLoading);
-    fillGrainSet(g, layout, loading, colors.loading);
-    fillGrainSet(g, layout, visited, colors.visited);
-    fillGrainSet(g, layout, playing, colors.playing);
+
+    drawGrainSet(g, layout, loading, colors.loading);
+    drawGrainSet(g, layout, visited, colors.visited);
+    drawGrainSet(g, layout, playing, colors.playing, colors.outline);
   }
 
 private:
@@ -282,14 +284,17 @@ private:
     juce::SortedSet<unsigned> visited, playing, startLoading, stopLoading;
   } collector;
 
-  static void fillGrainSet(juce::Graphics &g, const Layout &layout,
-                           juce::SortedSet<unsigned> &grains,
-                           juce::Colour color) {
+  static void drawGrainSet(juce::Graphics &g, const Layout &layout,
+                           juce::SortedSet<unsigned> &grains, juce::Colour fill, juce::Colour outline={}) {
     juce::RectangleList<float> rects;
     for (auto grain : grains) {
       rects.add(layout.grainRectangle(grain).expanded(2.5f));
     }
-    g.setFillType(juce::FillType(color));
+    if (!outline.isTransparent()) {
+      g.setColour(outline);
+      g.strokePath(rects.toPath(), juce::PathStrokeType(1.5f));
+    }
+    g.setColour(fill);
     g.fillRectList(rects);
   }
 
@@ -342,9 +347,10 @@ void MapPanel::paint(juce::Graphics &g) {
   image->drawLatest(g, bounds);
   if (live) {
     live->paint(g, bounds, LiveOverlay::Colors{
-      .loading = juce::Colour(0x55FF0000),
-      .visited = findColour(juce::ResizableWindow::backgroundColourId).contrasting(1.f).withAlpha(0.5f),
+      .loading = juce::Colour(0x66ff2200),
+      .visited = juce::Colour(0xbbffffff),
       .playing = findColour(juce::Slider::thumbColourId),
+      .outline = findColour(juce::ResizableWindow::backgroundColourId),
     });
   }
 }
