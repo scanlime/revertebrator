@@ -395,7 +395,8 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
         // If we haven't actually started playing yet, we can delay starting
         // FIXME: now that the grains load in LIFO order, this can block
         //         on an early grain / empty reservoir even if later grains
-        //         in the queue have loaded. can we fix this by filling our reservoir earlier?
+        //         in the queue have loaded. can we fix this by filling our
+        //         reservoir earlier?
         return;
 
       } else {

@@ -197,7 +197,7 @@ private:
     auto image = std::make_unique<juce::Image>(
         juce::Image::RGB, std::max(1, width), std::max(1, height), false);
 
-    if (req.index && req.index->isValid()) {
+    if (req.index != nullptr && req.index->isValid()) {
       Layout layout(req.bounds.toFloat(), *req.index);
       double numSamples = double(req.index->numSamples);
       juce::Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
@@ -391,12 +391,12 @@ void MapPanel::requestNewImage() {
 void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool isDown) {
   auto source = e.source.getIndex();
   auto index = processor.grainData.getIndex();
-  if (index == nullptr) {
-    processor.mouseInputForGrain(0, false, source);
-  } else {
+  if (index != nullptr && index->isValid()) {
     Layout layout(getLocalBounds().toFloat(), *index);
     auto point = layout.pointInfo(e.getEventRelativeTo(this).position);
     processor.mouseInputForGrain(point.grain, isDown && point.valid, source);
+  } else {
+    processor.mouseInputForGrain(0, false, source);
   }
 }
 

@@ -136,7 +136,7 @@ void RvvProcessor::attachToState() {
 
 void RvvProcessor::updateSoundFromState() {
   GrainIndex::Ptr index = grainData.getIndex();
-  if (index != nullptr) {
+  if (index != nullptr && index->isValid()) {
     synth.changeSound(
         *index,
         {.sampleRate = synth.getSampleRate(),
