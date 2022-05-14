@@ -348,14 +348,17 @@ void MapPanel::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds().toFloat();
   image->drawLatest(g, bounds);
   if (live) {
-    live->paint(
-        g, bounds,
-        LiveOverlay::Colors{
-            .loading = juce::Colours::orangered.withAlpha(0.5f),
-            .visited = juce::Colours::white.withAlpha(0.75f),
-            .playing = findColour(juce::Slider::thumbColourId),
-            .outline = findColour(juce::ResizableWindow::backgroundColourId),
-        });
+    auto background = findColour(juce::ResizableWindow::backgroundColourId);
+    auto highlight = findColour(juce::Slider::thumbColourId);
+    auto reddish = highlight.withRotatedHue(0.5f).interpolatedWith(
+        juce::Colours::red, 0.5f);
+    live->paint(g, bounds,
+                LiveOverlay::Colors{
+                    .loading = reddish.withAlpha(0.4f),
+                    .visited = background.contrasting().withAlpha(0.7f),
+                    .playing = highlight,
+                    .outline = background,
+                });
   }
 }
 
