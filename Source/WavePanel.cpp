@@ -13,6 +13,26 @@ public:
     juce::Colour background, highlight;
   };
 
+  void grainVoicePlaying(const GrainVoice &, const GrainSound &sound,
+                         GrainWaveform &wave, const GrainSequence::Point &seq,
+                         int sampleNum) override {
+    auto maxWidth = sound.maxGrainWidthSamples();
+    std::lock_guard<std::mutex> guard(collectorMutex);
+    maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
+    if (collector) {
+      collector->playing(wave, seq, sampleNum);
+    }
+  }
+
+  void visualizeSoundSettings(const GrainSound &sound) {
+    auto maxWidth = sound.maxGrainWidthSamples();
+    std::lock_guard<std::mutex> guard(collectorMutex);
+    maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
+    if (collector) {
+      collector->windows.push_back(sound.getWindow());
+    }
+  }
+
   void requestChange(const Request &req) {
     std::lock_guard<std::mutex> guard(requestMutex);
     request = req;
@@ -50,58 +70,46 @@ public:
     }
   }
 
-  void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
-                         GrainWaveform &wave, const GrainSequence::Point &seq,
-                         int sampleNum) override {
-    auto maxWidth = sound.maxGrainWidthSamples();
-    std::lock_guard<std::mutex> guard(collectorMutex);
-    maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
-    if (collector) {
-      collector->playing(voice, wave, seq.gain, sampleNum);
-    }
-  }
-
-  void visualizeSoundSettings(const GrainSound &sound) {
-    auto maxWidth = sound.maxGrainWidthSamples();
-    std::lock_guard<std::mutex> guard(collectorMutex);
-    maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
-    if (collector) {
-      collector->visualizeSoundSettings(sound);
-    }
-  }
-
 private:
   struct Collector {
   public:
-    Collector(int numColumns, float samplesPerColumn, int samplesPerTimeStep)
-        : columns(numColumns), samplesPerColumn(samplesPerColumn),
-          samplesPerTimeStep(samplesPerTimeStep) {
-      jassert(numColumns >= 1);
-      jassert(samplesPerColumn > 0.f);
+    struct WaveInfo {
+      GrainWaveform::Ptr wave;
+      juce::Image coverage;
+    };
+
+    std::vector<GrainWaveform::Window> windows;
+    std::unordered_map<GrainWaveform *, WaveInfo> waves;
+    int numColumns, samplesPerTimeStep;
+    float samplesPerColumn;
+
+    int centerColumn() const { return numColumns / 2; }
+
+    void waveInfo(GrainWaveform &wave) {
+      auto &slot = waves[&wave];
+      if (slot.wave == nullptr) {
+        slot.wave = &wave;
+        slot.coverage =
+            juce::Image(juce::Image::SingleChannel, numColumns, 1, true);
+      }
+      jassert(slot.wave == &wave);
+      jassert(slot.coverage.getWidth() == numColumns);
     }
 
-    int centerColumn() { return columns.size() / 2; }
-
-    void playing(const GrainVoice &voice, GrainWaveform &wave, float gain,
+    void playing(GrainWaveform &wave, const GrainSequence::Point &seq,
                  int sampleNum) {
-      auto x0 = std::max<int>(
-          0, centerColumn() + (sampleNum + wave.key.window.range().getStart()) /
-                                  samplesPerColumn);
-      auto x1 = std::min<int>(columns.size() - 1,
-                              1. + centerColumn() +
-                                  (sampleNum + samplesPerTimeStep +
-                                   wave.key.window.range().getStart()) /
-                                      samplesPerColumn);
-      for (auto x = x0; x < x1; x++) {
-        columns[x].playbackGain += gain;
-      }
-    }
-
-    void visualizeSoundSettings(const GrainSound &sound) {
-      for (int x = 0; x < columns.size(); x++) {
-        columns[x].envelope =
-            sound.getWindow().evaluate((x - centerColumn()) * samplesPerColumn);
-      }
+      // auto x0 = std::max<int>(
+      //     0, centerColumn() + (sampleNum +
+      //     wave.key.window.range().getStart()) /
+      //                             samplesPerColumn);
+      // auto x1 = std::min<int>(columns.size() - 1,
+      //                         1. + centerColumn() +
+      //                             (sampleNum + samplesPerTimeStep +
+      //                              wave.key.window.range().getStart()) /
+      //                                 samplesPerColumn);
+      // for (auto x = x0; x < x1; x++) {
+      //   columns[x].playbackGain += seq.gain;
+      // }
     }
 
     std::unique_ptr<juce::Image> renderImage(const Request &req) {
@@ -109,45 +117,36 @@ private:
       if (height < 1) {
         return nullptr;
       }
-      auto image = std::make_unique<juce::Image>(juce::Image::RGB,
-                                                 columns.size(), height, false);
+      auto image = std::make_unique<juce::Image>(juce::Image::RGB, numColumns,
+                                                 height, false);
       juce::Graphics g(*image);
       g.fillAll(req.background);
-
-      juce::Path path;
-      auto m = 3;
-      for (int x = 0; x < columns.size(); x++) {
-        auto y = m + (height - 1 - m - m) * (1.f - columns[x].envelope);
-        if (x == 0) {
-          path.startNewSubPath(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
-      }
-      g.setColour(req.background.contrasting(1.f));
-      g.setOpacity(0.7f);
-      g.strokePath(path, juce::PathStrokeType(0.5f * m));
-      g.setOpacity(0.2f);
-      for (int x = 0; x < columns.size(); x++) {
-        if (columns[x].playbackGain > 0.f) {
-          g.drawVerticalLine(x, 0, height);
-        }
-      }
+      //
+      // juce::Path path;
+      // auto m = 3;
+      // for (int x = 0; x < numColumns; x++) {
+      //   auto y = m + (height - 1 - m - m) * (1.f - columns[x].envelope);
+      //   if (x == 0) {
+      //     path.startNewSubPath(x, y);
+      //   } else {
+      //     path.lineTo(x, y);
+      //   }
+      // }
+      // g.setColour(req.background.contrasting(1.f));
+      // g.setOpacity(0.7f);
+      // g.strokePath(path, juce::PathStrokeType(0.5f * m));
+      // g.setOpacity(0.2f);
+      // for (int x = 0; x < numColumns; x++) {
+      //   if (columns[x].playbackGain > 0.f) {
+      //     g.drawVerticalLine(x, 0, height);
+      //   }
+      // }
 
       g.setColour(req.highlight);
       g.drawVerticalLine(centerColumn(), 0, height);
 
       return image;
     }
-
-    struct Column {
-      float playbackGain{0.f}, envelope{0.f};
-      juce::Range<float> audioRange;
-    };
-
-    std::vector<Column> columns;
-    float samplesPerColumn;
-    int samplesPerTimeStep;
   };
 
   GrainSynth &synth;
@@ -178,13 +177,16 @@ private:
       return nullptr;
     }
     visualizeSoundSettings(*latestSound);
-    auto samplesPerTimeStep = latestSound->outputSampleRate() * timeStep;
+    auto samplesPerTimeStep = int(latestSound->outputSampleRate() * timeStep);
     std::unique_ptr<Collector> cptr;
     {
       std::lock_guard<std::mutex> guard(collectorMutex);
       auto samplesPerColumn = 2.f * maxWidthForNextCollector / width;
-      cptr = std::make_unique<Collector>(width, samplesPerColumn,
-                                         samplesPerTimeStep);
+      cptr = std::move(std::make_unique<Collector>(Collector{
+          .numColumns = width,
+          .samplesPerTimeStep = samplesPerTimeStep,
+          .samplesPerColumn = samplesPerColumn,
+      }));
       maxWidthForNextCollector = 0.f;
       std::swap(collector, cptr);
     }
