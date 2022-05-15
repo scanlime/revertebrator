@@ -71,13 +71,14 @@ private:
     //   be useful to filter vertical scale changes. actually, horizontal too.
     //   can we just filter the whole wave image?
     //
-    // Ok, new plan: if we are definitely collecting coverage per-wave and per-sample
-    // rather than per-frame and per-column, it'll be fastest and simplest to keep
-    // a flat std::vector of voice playback events, and sort it all out on the render
-    // thread. There we could just draw a rectangle list onto an image that gets
-    // temporally filtered. The Y axis should be Wave, sorted by grain#, so it's
-    // like a regular playback head when monophonic but when many grains are happening
-    // it's more like a piano roll of waveforms multiplied with playback coverage*gain.
+    // Ok, new plan: if we are definitely collecting coverage per-wave and
+    // per-sample rather than per-frame and per-column, it'll be fastest and
+    // simplest to keep a flat std::vector of voice playback events, and sort it
+    // all out on the render thread. There we could just draw a rectangle list
+    // onto an image that gets temporally filtered. The Y axis should be Wave,
+    // sorted by grain#, so it's like a regular playback head when monophonic
+    // but when many grains are happening it's more like a piano roll of
+    // waveforms multiplied with playback coverage*gain.
     //
   public:
     static constexpr int height = 5;

@@ -32,7 +32,7 @@ private:
   juce::Value grainDataStatus;
 
   void updateGrainUnderMouse(const juce::MouseEvent &, bool);
-  void requestNewImage();
+  void requestNewImage(GrainIndex &index);
 
   void timerCallback() override;
   void valueChanged(juce::Value &) override;
