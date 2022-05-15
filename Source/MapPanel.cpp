@@ -338,8 +338,9 @@ MapPanel::MapPanel(RvvProcessor &processor)
     : processor(processor),
       image(std::make_unique<ImageRender>(processor.generalPurposeThreads)) {
   processor.grainData.referToStatusOutput(grainDataStatus);
-  grainDataStatus.addListener(this);
   image->addChangeListener(this);
+  grainDataStatus.addListener(this);
+  valueChanged(grainDataStatus);
 }
 
 MapPanel::~MapPanel() { image->removeChangeListener(this); }
