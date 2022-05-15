@@ -2,7 +2,6 @@
 #include "ZipReader64.h"
 #include <FLAC/all.h>
 #include <deque>
-#include <mutex>
 
 class GrainData::CacheCleanupJob : private juce::ThreadPoolJob,
                                    private juce::Timer {

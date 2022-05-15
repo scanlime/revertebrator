@@ -1,9 +1,6 @@
 #pragma once
 
 #include <JuceHeader.h>
-#include <functional>
-#include <mutex>
-#include <unordered_map>
 
 class GrainWaveform : public juce::ReferenceCountedObject {
 public:

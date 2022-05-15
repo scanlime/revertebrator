@@ -3,7 +3,6 @@
 #include "GrainData.h"
 #include "GrainSynth.h"
 #include <JuceHeader.h>
-#include <mutex>
 
 class RvvProcessor : public juce::AudioProcessor,
                      private juce::ValueTree::Listener,

@@ -1,5 +1,4 @@
 #include "WavePanel.h"
-#include <unordered_map>
 
 class WavePanel::ImageRender : public juce::Thread,
                                public juce::ChangeBroadcaster,
