@@ -62,9 +62,15 @@ public:
 
 private:
   class CoverageFilter {
-    // FIXME: make the coverage map width == number of samples not number of
-    // columns,
-    //    and resample once per frame.
+    // FIXME:
+    // - make the coverage map width == number of samples not number of columns,
+    //   and resample once per frame.
+    // - do store coverage per-waveform, persistently.
+    // - the whole CoverageFilter/Collector split doesn't make sense, even more
+    //   so with per-wave coverage tracking?
+    // - Actually maybe temporal filtering goes as late as possible? it would
+    //   be useful to filter vertical scale changes. actually, horizontal too.
+    //   can we just filter the whole wave image?
   public:
     static constexpr int height = 5;
     static constexpr int border = 1;
