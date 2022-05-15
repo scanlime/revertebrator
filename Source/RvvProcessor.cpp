@@ -20,10 +20,10 @@ RvvProcessor::RvvProcessor()
                     "win_mix", "Mix AB",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "grain_rate", "Grain Hz",
+                    "grain_rate", "Grain Rate",
                     juce::NormalisableRange<float>(0.0f, 200.0f), 10.f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "grain_rate_spread", "R Spread",
+                    "grain_rate_spread", "Rate Spread",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "speed_warp", "Speed",
@@ -32,22 +32,22 @@ RvvProcessor::RvvProcessor()
                     "sel_center", "Sel",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "sel_mod", "S Mod",
+                    "sel_mod", "Sel Mod",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "sel_spread", "S Spread",
+                    "sel_spread", "Sel Spread",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "pitch_spread", "P Spread",
+                    "pitch_spread", "Pitch Spread",
                     juce::NormalisableRange<float>(0.0f, 8.0f), 0.0f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "pitch_bend_range", "P Bend",
+                    "pitch_bend_range", "Pitch Bend",
                     juce::NormalisableRange<float>(1.0f, 64.0f), 12.0f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "gain_db_low", "Vol Lo",
+                    "gain_db_low", "Volume Lo",
                     juce::NormalisableRange<float>(-100.0f, 0.0f), -70.0f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "gain_db_high", "Vol Hi",
+                    "gain_db_high", "Volume Hi",
                     juce::NormalisableRange<float>(-100.0f, 0.0f), -30.0f),
             }),
       grainData(generalPurposeThreads), synth(grainData, 512) {
