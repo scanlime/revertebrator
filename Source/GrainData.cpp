@@ -1,6 +1,6 @@
 #include "GrainData.h"
+#include "FLAC/stream_decoder.h"
 #include "ZipReader64.h"
-#include <FLAC/all.h>
 #include <deque>
 
 class GrainData::CacheCleanupJob : private juce::ThreadPoolJob,
@@ -64,7 +64,7 @@ public:
   }
 
 private:
-  void valueChanged(juce::Value &) {
+  void valueChanged(juce::Value &) override {
     juce::ScopedLock guard(valuesRecursiveMutex);
     if (srcValue.toString().isNotEmpty()) {
       statusValue.setValue("Loading grain index...");

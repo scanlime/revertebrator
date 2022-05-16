@@ -8,61 +8,76 @@
 class GrainSequence {
 public:
   using Ptr = std::unique_ptr<GrainSequence>;
+  using Rng = std::mt19937;
 
   struct Point {
-    unsigned grain;
+    GrainWaveform::Key waveKey;
     float gain;
+    int samplesUntilNextPoint;
   };
 
-  GrainIndex::Ptr index;
+  struct Params {
+    GrainWaveform::Window::Params windowParams;
+    float sampleRate, grainRate, grainRateSpread;
+    float selSpread, pitchSpread;
+    float speedWarp, gainDbLow, gainDbHigh;
 
-  GrainSequence(GrainIndex &);
+    float speedRatio(const GrainIndex &) const;
+    GrainWaveform::Window window(const GrainIndex &index) const;
+    unsigned chooseGrain(const GrainIndex &, float pitch, float sel);
+    float velocityToGain(float velocity) const;
+    int samplesUntilNextPoint(Rng &) const;
+    float selNoise(Rng &, float) const;
+    float pitchNoise(Rng &, float) const;
+  };
+
   virtual ~GrainSequence();
-  virtual Point generate(std::mt19937 &) = 0;
+  virtual Point generate(Rng &) = 0;
 };
 
-class StationaryGrainSequence : public GrainSequence {
+class TouchGrainSequence : public GrainSequence {
 public:
-  StationaryGrainSequence(GrainIndex &, const Point &);
-  ~StationaryGrainSequence() override;
-  Point generate(std::mt19937 &) override;
+  struct Event {
+    float pitch, sel, velocity;
+  };
+
+  TouchGrainSequence(GrainIndex &, const Params &, const Event &);
+  ~TouchGrainSequence() override;
+  Point generate(Rng &) override;
 
 private:
-  Point value;
+  GrainIndex &index;
+  Params params;
+  Event event;
 };
 
 class MidiGrainSequence : public GrainSequence {
 public:
-  struct Params {
-    float selCenter, selMod, selSpread;
-    float speedWarp, pitchSpread, pitchBendRange;
-    float gainDbLow, gainDbHigh;
+  struct MidiParams {
+    Params common;
+    float selCenter, selMod, pitchBendRange;
   };
 
-  struct Midi {
+  struct MidiState {
     int note, pitchWheel, modWheel;
     float velocity;
   };
 
-  Params params;
-  Midi midi;
-
-  MidiGrainSequence(GrainIndex &, const Params &, const Midi &);
+  MidiGrainSequence(GrainIndex &, const MidiParams &, const MidiState &);
   ~MidiGrainSequence() override;
-  Point generate(std::mt19937 &) override;
+  Point generate(Rng &) override;
+
+private:
+  GrainIndex &index;
+  MidiParams params;
+  MidiState state;
 };
 
 class GrainSound : public juce::SynthesiserSound {
 public:
   using Ptr = juce::ReferenceCountedObjectPtr<GrainSound>;
 
-  struct Params {
-    double sampleRate, grainRate;
-    GrainWaveform::Window::Params window;
-    MidiGrainSequence::Params sequence;
-  };
-
-  GrainSound(GrainIndex &index, const Params &params);
+  GrainSound(GrainIndex &index, const MidiGrainSequence::MidiParams &params);
   ~GrainSound() override;
   bool appliesToNote(int) override;
   bool appliesToChannel(int) override;
@@ -75,14 +90,13 @@ public:
   float maxGrainWidthSamples() const;
   const GrainWaveform::Window &getWindow() const;
   GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
-  GrainSequence::Ptr grainSequence(const MidiGrainSequence::Midi &midi);
-  GrainSequence::Ptr grainSequence(unsigned grain, float velocity);
+  GrainSequence::Ptr grainSequence(const MidiGrainSequence::MidiState &midi);
+  GrainSequence::Ptr grainSequence(float pitch, float sel, float velocity);
 
 private:
   GrainIndex::Ptr index;
   Params params;
-  float speedRatio;
-  float maxWidthSamples;
+  float speedRatio, maxWidthSamples;
   GrainWaveform::Window window;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSound)
@@ -90,7 +104,7 @@ private:
 
 class GrainVoice : public juce::SynthesiserVoice {
 public:
-  GrainVoice(GrainData &grainData, const std::mt19937 &prng);
+  GrainVoice(GrainData &, const std::mt19937 &);
   ~GrainVoice() override;
 
   bool canPlaySound(juce::SynthesiserSound *) override;
@@ -103,10 +117,10 @@ public:
 
   class Listener {
   public:
-    virtual void grainVoicePlaying(const GrainVoice &voice,
-                                   const GrainSound &sound, GrainWaveform &wave,
-                                   const GrainSequence::Point &seq,
-                                   int sampleNum, int sampleCount) = 0;
+    virtual void grainVoicePlaying(const GrainVoice &, const GrainSound &,
+                                   GrainWaveform &,
+                                   const GrainSequence::Point &, int sampleNum,
+                                   int sampleCount) = 0;
   };
 
   void addListener(Listener *);

@@ -1,44 +1,89 @@
 #include "GrainSynth.h"
 
-GrainSequence::GrainSequence(GrainIndex &index) : index(index) {}
-
 GrainSequence::~GrainSequence() {}
 
-StationaryGrainSequence::StationaryGrainSequence(GrainIndex &index,
-                                                 const Point &value)
-    : GrainSequence(index), value(value) {}
+float GrainSequence::Params::speedRatio(const GrainIndex &index) const {
+  return index.sampleRate / sampleRate * speedWarp;
+}
+
+GrainWaveform::Window window(const GrainIndex &index) const {
+  return GrainWaveform::Window(index->maxGrainWidthSamples() / speedRatio,
+                               windowParams);
+}
+
+unsigned GrainSequence::Params::chooseGrain(const GrainIndex &, float pitch,
+                                            float sel) {
+  auto bin = index.closestBinForPitch(pitch / speedWarp);
+  auto grains = index.grainsForBin(bin);
+  auto sel01 = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
+  return std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
+}
+
+float GrainSequence::Params::velocityToGain(float velocity) const {
+  return juce::Decibels::decibelsToGain(
+      juce::jmap(velocity, gainDbLow, gainDbHigh));
+}
+
+int GrainSequence::Params::samplesUntilNextPoint(Rng &prng) const {
+  std::uniform_real_distribution<> uniform(-1., 1.);
+  auto noisyGrainRate =
+      std::max(0.01f, grainRate * (1.f + grainRateSpread * uniform(prng)));
+  return sampleRate / noisyGrainRate;
+}
+
+float GrainSequence::Params::selNoise(Rng &prng, float input) const {
+  std::uniform_real_distribution<> uniform(-1., 1.);
+  return input + selSpread * uniform(prng);
+}
+
+float GrainSequence::Params::pitchNoise(Rng &prng, float input) const {
+  std::uniform_real_distribution<> uniform(-1., 1.);
+  return input * (1.f + pitchSpread * uniform(prng));
+}
+
+StationaryGrainSequence(GrainIndex &index, const Params &params, float pitch,
+                        float sel, float velocity)
+    : index(index), params(params), pitch(pitch), sel(sel),
+      gain(params.velocityToGain(velocity)) {}
 
 StationaryGrainSequence::~StationaryGrainSequence() {}
 
-GrainSequence::Point StationaryGrainSequence::generate(std::mt19937 &) {
-  return value;
+GrainSequence::Point StationaryGrainSequence::generate(Rng &prng) {
+  return Point{
+      .waveKey =
+          {
+              .grain = params.chooseGrain(index, params.pitchNoise(prng, pitch),
+                                          params.selNoise(prng, sel)),
+              .speedRatio = params.speedRatio(index),
+              .window = params.window(index),
+          },
+      .gain = gain,
+      .samplesUntilNextPoint = params.samplesUntilNextPoint(prng)};
 }
 
-MidiGrainSequence::MidiGrainSequence(GrainIndex &index, const Params &params,
-                                     const Midi &midi)
-    : GrainSequence(index), params(params), midi(midi) {}
+MidiGrainSequence::MidiGrainSequence(GrainIndex &index,
+                                     const MidiParams &params,
+                                     const MidiState &midi)
+    : index(index), params(params), midi(midi) {}
 
 MidiGrainSequence::~MidiGrainSequence() {}
 
-GrainSequence::Point MidiGrainSequence::generate(std::mt19937 &prng) {
-  std::uniform_real_distribution<> uniform(-1., 1.);
-  auto selNoise = params.selSpread * uniform(prng);
-  auto pitchNoise = params.pitchSpread * uniform(prng);
-
+GrainSequence::Point MidiGrainSequence::generate(Rng &prng) {
   auto pitchBend = midi.pitchWheel / 8192.0 - 1.0;
   auto modWheel = midi.modWheel / 128.0 - 0.5;
-  auto gainDb = juce::jmap(midi.velocity, params.gainDbLow, params.gainDbHigh);
-
   auto sel = params.selCenter + modWheel * params.selMod + selNoise;
-  auto sel01 = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
-
-  auto semitones = midi.note + params.pitchBendRange * pitchBend + pitchNoise;
-  auto hz = 440.0 * std::pow(2.0, (semitones - 69.0) / 12.0);
-
-  auto bin = index->closestBinForPitch(hz / params.speedWarp);
-  auto grains = index->grainsForBin(bin);
-  unsigned g = std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
-  return {grain : g, gain : juce::Decibels::decibelsToGain(gainDb)};
+  auto semitones = midi.note + params.pitchBendRange * pitchBend;
+  auto pitch = 440.0 * std::pow(2.0, (semitones - 69.0) / 12.0);
+  return Point{
+      .waveKey =
+          {
+              .grain = params.chooseGrain(index, params.pitchNoise(prng, pitch),
+                                          params.selNoise(prng, sel)),
+              .speedRatio = params.speedRatio(index),
+              .window = params.window(index),
+          },
+      .gain = params.velocityToGain(midi.velocity),
+      .samplesUntilNextPoint = params.samplesUntilNextPoint(prng)};
 }
 
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
@@ -179,8 +224,9 @@ GrainSequence::Ptr GrainSound::grainSequence(unsigned grain, float velocity) {
   auto gainDb = juce::jmap(velocity, params.sequence.gainDbLow,
                            params.sequence.gainDbHigh);
   return std::make_unique<StationaryGrainSequence>(
-      getIndex(), GrainSequence::
-      Point{grain : grain, gain : juce::Decibels::decibelsToGain(gainDb)});
+      getIndex(),
+      GrainSequence::Point{.grain = grain,
+                           .gain = juce::Decibels::decibelsToGain(gainDb)});
 }
 
 GrainVoice::GrainVoice(GrainData &grainData, const std::mt19937 &prng)

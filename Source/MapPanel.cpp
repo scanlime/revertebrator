@@ -127,6 +127,8 @@ public:
 
   void requestChange(const Request &req) {
     bool shouldAddJob;
+    jassert(req.index);
+    jassert(req.index->isValid());
     {
       std::lock_guard<std::mutex> guard(lock);
       nextRequest = req;
@@ -182,6 +184,9 @@ private:
   }
 
   static std::unique_ptr<juce::Image> render(const Request &req) {
+    jassert(req.index != nullptr);
+    jassert(req.index->isValid());
+
     constexpr double hueSpread = 18.;
     constexpr float lightnessExponent = 2.5f;
     constexpr float foregroundContrast = 0.7f;
@@ -194,42 +199,40 @@ private:
     fg.getHSL(fgH, fgS, fgL);
 
     auto width = req.bounds.getWidth(), height = req.bounds.getHeight();
-    auto image = std::make_unique<juce::Image>(
-        juce::Image::RGB, std::max(1, width), std::max(1, height), false);
+    if (width < 1 || height < 1) {
+      return nullptr;
+    }
+    auto image =
+        std::make_unique<juce::Image>(juce::Image::RGB, width, height, false);
+    Layout layout(req.bounds.toFloat(), *req.index);
+    double numSamples = double(req.index->numSamples);
+    juce::Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
+    std::mt19937 jitterPrng;
 
-    if (req.index != nullptr && req.index->isValid()) {
-      Layout layout(req.bounds.toFloat(), *req.index);
-      double numSamples = double(req.index->numSamples);
-      juce::Image::BitmapData bits(*image, juce::Image::BitmapData::writeOnly);
-      std::mt19937 jitterPrng;
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        juce::Point<float> pixelLoc(x, y);
+        double accum = 0.;
 
-      for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-          juce::Point<float> pixelLoc(x, y);
-          double accum = 0.;
-
-          for (int sy = 0; sy < sampleGridSize; sy++) {
-            for (int sx = 0; sx < sampleGridSize; sx++) {
-              auto jitter = jitterPrng();
-              float jx = float(jitter & 0xffff) / float(0xffff);
-              float jy = float((jitter >> 16) & 0xffff) / float(0xffff);
-              auto sub = juce::Point<float>(sx + jx, sy + jy) / sampleGridSize;
-              auto point = layout.pointInfo(pixelLoc + sub);
-              accum += point.valid ? (point.sample / numSamples) : 0.f;
-            }
+        for (int sy = 0; sy < sampleGridSize; sy++) {
+          for (int sx = 0; sx < sampleGridSize; sx++) {
+            auto jitter = jitterPrng();
+            float jx = float(jitter & 0xffff) / float(0xffff);
+            float jy = float((jitter >> 16) & 0xffff) / float(0xffff);
+            auto sub = juce::Point<float>(sx + jx, sy + jy) / sampleGridSize;
+            auto point = layout.pointInfo(pixelLoc + sub);
+            accum += point.valid ? (point.sample / numSamples) : 0.f;
           }
-          accum /= juce::square<float>(sampleGridSize);
-
-          auto cmH = float(fmod(bgH + hueSpread * accum, 1.0));
-          auto cmS = bgS + (fgS - bgS) * float(accum);
-          auto cmL = bgL + (fgL - bgL) * powf(float(accum), lightnessExponent);
-          auto colormap = juce::Colour::fromHSL(cmH, cmS, cmL, 1.0f);
-
-          bits.setPixelColour(x, y, colormap);
         }
+        accum /= juce::square<float>(sampleGridSize);
+
+        auto cmH = float(fmod(bgH + hueSpread * accum, 1.0));
+        auto cmS = bgS + (fgS - bgS) * float(accum);
+        auto cmL = bgL + (fgL - bgL) * powf(float(accum), lightnessExponent);
+        auto colormap = juce::Colour::fromHSL(cmH, cmS, cmL, 1.0f);
+
+        bits.setPixelColour(x, y, colormap);
       }
-    } else {
-      image->clear(req.bounds, bg);
     }
     return image;
   }
@@ -364,16 +367,22 @@ void MapPanel::paint(juce::Graphics &g) {
 }
 
 void MapPanel::valueChanged(juce::Value &) {
-  requestNewImage();
   auto index = processor.grainData.getIndex();
-  if (index == nullptr) {
-    live = nullptr;
-  } else if (live == nullptr || index != &live->getIndex()) {
+  if (index && index->isValid()) {
+    requestNewImage(*index);
     live = std::make_unique<LiveOverlay>(*index, processor.synth);
+  } else {
+    live = nullptr;
   }
 }
 
-void MapPanel::resized() { requestNewImage(); }
+void MapPanel::resized() {
+  auto index = processor.grainData.getIndex();
+  if (index && index->isValid()) {
+    requestNewImage(*index);
+  }
+}
+
 void MapPanel::timerCallback() { repaint(); }
 
 void MapPanel::mouseDown(const juce::MouseEvent &e) {
@@ -400,9 +409,9 @@ void MapPanel::mouseDrag(const juce::MouseEvent &e) {
   updateGrainUnderMouse(e, true);
 }
 
-void MapPanel::requestNewImage() {
+void MapPanel::requestNewImage(GrainIndex &index) {
   image->requestChange(ImageRender::Request{
-      .index = processor.grainData.getIndex(),
+      .index = index,
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
   });

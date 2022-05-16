@@ -23,7 +23,7 @@
     </GROUP>
   </MAINGROUP>
   <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"
-               JUCE_USE_OGGVORBIS="0" JUCE_USE_FLAC="0" JUCE_USE_MP3AUDIOFORMAT="0"
+               JUCE_USE_OGGVORBIS="0" JUCE_USE_FLAC="1" JUCE_USE_MP3AUDIOFORMAT="0"
                JUCE_USE_LAME_AUDIO_FORMAT="0" JUCE_USE_WINDOWS_MEDIA_FORMAT="0"
                JUCE_USE_CDREADER="0" JUCE_USE_CDBURNER="0" JUCE_USE_CURL="0"
                JUCE_WEB_BROWSER="0" JUCE_USE_WIN_WEBVIEW2="0" JUCE_ENABLE_LIVE_CONSTANT_EDITOR="0"
@@ -89,6 +89,30 @@
         <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
+    <ANDROIDSTUDIO targetFolder="Builds/Android" androidExternalWriteNeeded="0"
+                   androidInternetNeeded="0" microphonePermissionNeeded="0" cameraPermissionNeeded="0"
+                   androidBluetoothNeeded="0" androidExternalReadNeeded="1" androidInAppBilling="0"
+                   androidVibratePermissionNeeded="0" androidEnableContentSharing="1"
+                   androidPushNotifications="0">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug"/>
+        <CONFIGURATION isDebug="0" name="Release"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_core" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_data_structures" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_events" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_graphics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="/usr/share/juce/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="/usr/share/juce/modules"/>
+      </MODULEPATHS>
+    </ANDROIDSTUDIO>
   </EXPORTFORMATS>
   <MODULES>
     <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>

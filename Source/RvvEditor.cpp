@@ -206,6 +206,10 @@ RvvEditor::RvvEditor(RvvProcessor &p)
   setSize(savedWidth.getValue(), savedHeight.getValue());
   setResizable(true, true);
 
+  // On Android, asynchronously ask for file read permission
+  juce::RuntimePermissions::request(
+      juce::RuntimePermissions::readExternalStorage, [](bool wasGranted) {});
+
   // JUCE's recommended approach for setting initial keyboard focus
   startTimer(400);
 }
