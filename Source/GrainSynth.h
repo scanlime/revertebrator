@@ -37,18 +37,18 @@ public:
 
 class TouchGrainSequence : public GrainSequence {
 public:
-  struct Event {
+  struct TouchEvent {
     float pitch, sel, velocity;
   };
 
-  TouchGrainSequence(GrainIndex &, const Params &, const Event &);
+  TouchGrainSequence(GrainIndex &, const Params &, const TouchEvent &);
   ~TouchGrainSequence() override;
   Point generate(Rng &) override;
 
 private:
   GrainIndex &index;
   Params params;
-  Event event;
+  TouchEvent event;
 };
 
 class MidiGrainSequence : public GrainSequence {
@@ -58,19 +58,19 @@ public:
     float selCenter, selMod, pitchBendRange;
   };
 
-  struct MidiState {
+  struct MidiEvent {
     int note, pitchWheel, modWheel;
     float velocity;
   };
 
-  MidiGrainSequence(GrainIndex &, const MidiParams &, const MidiState &);
+  MidiGrainSequence(GrainIndex &, const MidiParams &, const MidiEvent &);
   ~MidiGrainSequence() override;
   Point generate(Rng &) override;
 
 private:
   GrainIndex &index;
   MidiParams params;
-  MidiState state;
+  MidiEvent event;
 };
 
 class GrainSound : public juce::SynthesiserSound {
@@ -82,29 +82,19 @@ public:
   bool appliesToNote(int) override;
   bool appliesToChannel(int) override;
 
-  GrainIndex &getIndex();
-  bool isUsingSameIndex(GrainIndex &ix) const;
-  double grainRepeatsPerSample() const;
-  double outputSampleRate() const;
-  int targetQueueDepth() const;
-  float maxGrainWidthSamples() const;
-  const GrainWaveform::Window &getWindow() const;
-  GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
-  GrainSequence::Ptr grainSequence(const MidiGrainSequence::MidiState &midi);
-  GrainSequence::Ptr grainSequence(float pitch, float sel, float velocity);
+  bool appliesToGrainIndex(GrainIndex &ix) const;
+  GrainSequence::Ptr grainSequence(const MidiGrainSequence::MidiEvent &);
+  GrainSequence::Ptr grainSequence(const TouchGrainSequence::TouchEvent &);
 
 private:
   GrainIndex::Ptr index;
-  Params params;
-  float speedRatio, maxWidthSamples;
-  GrainWaveform::Window window;
-
+  MidiGrainSequence::MidiParams params;
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSound)
 };
 
 class GrainVoice : public juce::SynthesiserVoice {
 public:
-  GrainVoice(GrainData &, const std::mt19937 &);
+  GrainVoice(GrainData &, const GrainSequence::Rng &);
   ~GrainVoice() override;
 
   bool canPlaySound(juce::SynthesiserSound *) override;
@@ -125,11 +115,8 @@ public:
 
   void addListener(Listener *);
   void removeListener(Listener *);
-
-  void startGrain(unsigned grain, float velocity);
-
+  void startTouch(const TouchGrainSequence::TouchEvent &event);
   void clearGrainQueue();
-  void replaceReservoirWithQueuedGrains();
 
 private:
   struct Grain {
@@ -143,7 +130,7 @@ private:
     void add(const Grain &);
     void clear();
     bool empty() const;
-    const Grain &choose(std::mt19937 &) const;
+    const Grain &choose(GrainSequence::Rng &) const;
 
   private:
     std::deque<Grain> grains;
@@ -164,7 +151,7 @@ private:
   std::mutex listenerMutex;
   juce::ListenerList<Listener> listeners;
 
-  std::mt19937 prng;
+  GrainSequence::Rng prng;
   GrainSequence::Ptr sequence;
   std::deque<Grain> queue;
   Reservoir reservoir;

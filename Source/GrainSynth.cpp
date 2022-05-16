@@ -87,12 +87,12 @@ GrainSequence::Point MidiGrainSequence::generate(Rng &prng) {
 }
 
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
-  std::mt19937 seedGenerator;
+  GrainSequence::Rng seedGenerator;
   for (auto i = 0; i < juce::numElementsInArray(lastModWheelValues); i++) {
     lastModWheelValues[i] = 64;
   }
   for (auto i = 0; i < numVoices; i++) {
-    addVoice(new GrainVoice(grainData, std::mt19937(seedGenerator())));
+    addVoice(new GrainVoice(grainData, seedGenerator()));
   }
 }
 
@@ -229,7 +229,7 @@ GrainSequence::Ptr GrainSound::grainSequence(unsigned grain, float velocity) {
                            .gain = juce::Decibels::decibelsToGain(gainDb)});
 }
 
-GrainVoice::GrainVoice(GrainData &grainData, const std::mt19937 &prng)
+GrainVoice::GrainVoice(GrainData &grainData, const GrainSequence::Rng &prng)
     : grainData(grainData), prng(prng) {}
 
 GrainVoice::~GrainVoice() {}
@@ -273,7 +273,7 @@ void GrainVoice::Reservoir::clear() {
 bool GrainVoice::Reservoir::empty() const { return grains.empty(); }
 
 const GrainVoice::Grain &
-GrainVoice::Reservoir::choose(std::mt19937 &prng) const {
+GrainVoice::Reservoir::choose(GrainSequence::Rng &prng) const {
   std::uniform_int_distribution<> uniform(0, grains.size() - 1);
   return grains[uniform(prng)];
 }
