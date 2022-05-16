@@ -1,6 +1,6 @@
 #include "GrainData.h"
+#include "FLAC/stream_decoder.h"
 #include "ZipReader64.h"
-#include <FLAC/all.h>
 #include <deque>
 
 class GrainData::CacheCleanupJob : private juce::ThreadPoolJob,
