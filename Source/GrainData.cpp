@@ -64,7 +64,7 @@ public:
   }
 
 private:
-  void valueChanged(juce::Value &) {
+  void valueChanged(juce::Value &) override {
     juce::ScopedLock guard(valuesRecursiveMutex);
     if (srcValue.toString().isNotEmpty()) {
       statusValue.setValue("Loading grain index...");

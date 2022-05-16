@@ -38,7 +38,7 @@ GrainSequence::Point MidiGrainSequence::generate(std::mt19937 &prng) {
   auto bin = index->closestBinForPitch(hz / params.speedWarp);
   auto grains = index->grainsForBin(bin);
   unsigned g = std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
-  return {grain : g, gain : juce::Decibels::decibelsToGain(gainDb)};
+  return {.grain = g, .gain = juce::Decibels::decibelsToGain(gainDb)};
 }
 
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
@@ -179,8 +179,9 @@ GrainSequence::Ptr GrainSound::grainSequence(unsigned grain, float velocity) {
   auto gainDb = juce::jmap(velocity, params.sequence.gainDbLow,
                            params.sequence.gainDbHigh);
   return std::make_unique<StationaryGrainSequence>(
-      getIndex(), GrainSequence::
-      Point{grain : grain, gain : juce::Decibels::decibelsToGain(gainDb)});
+      getIndex(),
+      GrainSequence::Point{.grain = grain,
+                           .gain = juce::Decibels::decibelsToGain(gainDb)});
 }
 
 GrainVoice::GrainVoice(GrainData &grainData, const std::mt19937 &prng)

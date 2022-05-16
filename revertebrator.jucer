@@ -89,10 +89,10 @@
         <MODULEPATH id="juce_audio_formats" path="/usr/share/juce/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
-    <ANDROIDSTUDIO targetFolder="Builds/Android" androidCustomApplicationClass="org.scanlime.revertebrator"
-                   androidExternalWriteNeeded="0" androidInternetNeeded="0" microphonePermissionNeeded="0"
-                   cameraPermissionNeeded="0" androidBluetoothNeeded="0" androidExternalReadNeeded="1"
-                   androidInAppBilling="0" androidVibratePermissionNeeded="0" androidEnableContentSharing="0"
+    <ANDROIDSTUDIO targetFolder="Builds/Android" androidExternalWriteNeeded="0"
+                   androidInternetNeeded="0" microphonePermissionNeeded="0" cameraPermissionNeeded="0"
+                   androidBluetoothNeeded="0" androidExternalReadNeeded="1" androidInAppBilling="0"
+                   androidVibratePermissionNeeded="0" androidEnableContentSharing="1"
                    androidPushNotifications="0">
       <CONFIGURATIONS>
         <CONFIGURATION isDebug="1" name="Debug"/>
