@@ -272,8 +272,8 @@ public:
     loading.removeValuesIn(stopLoading);
 
     drawGrainSet(g, layout, loading, colors.loading);
-    drawGrainSet(g, layout, visited, colors.visited);
     drawGrainSet(g, layout, playing, colors.playing, colors.outline);
+    drawGrainSet(g, layout, visited, colors.visited);
   }
 
 private:
@@ -356,7 +356,7 @@ void MapPanel::paint(juce::Graphics &g) {
     live->paint(g, bounds,
                 LiveOverlay::Colors{
                     .loading = reddish.withAlpha(0.4f),
-                    .visited = background.contrasting().withAlpha(0.7f),
+                    .visited = background.contrasting().withAlpha(0.6f),
                     .playing = highlight,
                     .outline = background,
                 });
