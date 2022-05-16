@@ -37,7 +37,7 @@ public:
   void getStateInformation(juce::MemoryBlock &destData) override;
   void setStateInformation(const void *data, int sizeInBytes) override;
 
-  void mouseInputForGrain(unsigned grainId, bool isDown, int sourceId);
+  void touchEvent(const GrainSynth::TouchEvent &event);
 
   juce::AudioProcessorValueTreeState state;
   juce::MidiKeyboardState midiState;
@@ -46,17 +46,11 @@ public:
   GrainSynth synth;
 
 private:
-  struct MouseInputItem {
-    unsigned grain;
-    int sourceId;
-    bool isDown;
-  };
-
   juce::Value grainDataStatus;
   std::mutex inputQueueMutex;
-  juce::Array<MouseInputItem> inputQueue;
+  juce::Array<GrainSynth::TouchEvent> inputQueue;
 
-  void processMouseInputQueue();
+  void processInputQueue();
   void attachToState();
   void updateSoundFromState();
   void valueChanged(juce::Value &) override;

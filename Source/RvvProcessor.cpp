@@ -100,7 +100,7 @@ void RvvProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto startSample = 0;
   auto numSamples = buffer.getNumSamples();
   midiState.processNextMidiBuffer(midiMessages, startSample, numSamples, true);
-  processMouseInputQueue();
+  processInputQueue();
   synth.renderNextBlock(buffer, midiMessages, startSample, numSamples);
 }
 
@@ -166,24 +166,19 @@ void RvvProcessor::updateSoundFromState() {
   }
 }
 
-void RvvProcessor::mouseInputForGrain(unsigned grainId, bool isDown,
-                                      int sourceId) {
+void RvvProcessor::touchEvent(const GrainSynth::TouchEvent &event) {
   std::lock_guard<std::mutex> guard(inputQueueMutex);
-  inputQueue.add(MouseInputItem{
-      .grain = grainId,
-      .sourceId = sourceId,
-      .isDown = isDown,
-  });
+  inputQueue.add(event);
 }
 
-void RvvProcessor::processMouseInputQueue() {
+void RvvProcessor::processInputQueue() {
   juce::Array<MouseInputItem> items;
   {
     std::lock_guard<std::mutex> guard(inputQueueMutex);
     inputQueue.swapWith(items);
   }
   for (auto &event : items) {
-    synth.mouseInputForGrain(event.grain, event.isDown, event.sourceId);
+    synth.touchEvent(event);
   }
 }
 

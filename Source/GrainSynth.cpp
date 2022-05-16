@@ -41,14 +41,14 @@ float GrainSequence::Params::pitchNoise(Rng &prng, float input) const {
   return input * (1.f + pitchSpread * uniform(prng));
 }
 
-StationaryGrainSequence(GrainIndex &index, const Params &params, float pitch,
-                        float sel, float velocity)
-    : index(index), params(params), pitch(pitch), sel(sel),
-      gain(params.velocityToGain(velocity)) {}
+TouchGrainSequence::TouchGrainSequence(GrainIndex &index, const Params &params,
+                                       const TouchEvent &event)
+    : index(index), params(params), pitch(event.pitch), sel(event.sel),
+      gain(params.velocityToGain(event.velocity)) {}
 
-StationaryGrainSequence::~StationaryGrainSequence() {}
+TouchGrainSequence::~TouchGrainSequence() {}
 
-GrainSequence::Point StationaryGrainSequence::generate(Rng &prng) {
+GrainSequence::Point TouchGrainSequence::generate(Rng &prng) {
   return Point{
       .waveKey =
           {
@@ -63,17 +63,16 @@ GrainSequence::Point StationaryGrainSequence::generate(Rng &prng) {
 
 MidiGrainSequence::MidiGrainSequence(GrainIndex &index,
                                      const MidiParams &params,
-                                     const MidiState &midi)
-    : index(index), params(params), midi(midi) {}
+                                     const MidiEvent &event)
+    : index(index), params(params), event(event) {}
 
 MidiGrainSequence::~MidiGrainSequence() {}
 
 GrainSequence::Point MidiGrainSequence::generate(Rng &prng) {
-  auto pitchBend = midi.pitchWheel / 8192.0 - 1.0;
-  auto modWheel = midi.modWheel / 128.0 - 0.5;
-  auto sel = params.selCenter + modWheel * params.selMod + selNoise;
-  auto semitones = midi.note + params.pitchBendRange * pitchBend;
-  auto pitch = 440.0 * std::pow(2.0, (semitones - 69.0) / 12.0);
+  auto sel =
+      params.selCenter + params.selMod * (event.modWheel / 128.0f - 0.5f);
+  auto bend = params.pitchBendRange * (event.pitchWheel / 8192.0f - 1.0f);
+  auto pitch = 440.0f * std::pow(2.0f, (event.note + bend - 69.0f) / 12.0f);
   return Point{
       .waveKey =
           {
@@ -98,28 +97,27 @@ GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
 
 GrainSynth::~GrainSynth() {}
 
-void GrainSynth::mouseInputForGrain(unsigned grainId, bool isDown,
-                                    int sourceId) {
+void GrainSynth::touchEvent(int sourceId,
+                            const TouchGrainSequence::TouchEvent &event) {
   juce::ScopedLock sl(lock);
   auto sound = dynamic_cast<GrainSound *>(getSound(0).get());
   if (sound == nullptr) {
     return;
   }
-  if (isDown && !voiceForInputSource.contains(sourceId)) {
-    voiceForInputSource.set(sourceId, dynamic_cast<GrainVoice *>(findFreeVoice(
-                                          getSound(0).get(), -1, -1, true)));
+  if (event.velocity > 0.f && !voiceForInputSource.contains(sourceId)) {
+    auto voice = findFreeVoice(getSound(0).get(), -1, -1, true);
+    voiceForInputSource.set(sourceId, dynamic_cast<GrainVoice *>(voice));
   }
   auto voice = voiceForInputSource[sourceId];
   if (voice) {
-    if (isDown && grainId < sound->getIndex().numGrains()) {
-      constexpr auto velocity = 0.7f;
+    if (event.velocity > 0.f) {
       if (!voice->isVoiceActive()) {
         // We don't seem to have a direct way to start a juce::SynthesiserVoice
         // without also triggering a midi note that we need to dequeue.
         startVoice(voice, sound, 0, 0, 0);
         voice->clearGrainQueue();
       }
-      voice->startGrain(grainId, velocity);
+      voice->startTouch(event);
     } else {
       stopVoice(voice, 0, true);
       voiceForInputSource.remove(sourceId);

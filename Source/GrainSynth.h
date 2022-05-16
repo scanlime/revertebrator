@@ -48,7 +48,7 @@ public:
 private:
   GrainIndex &index;
   Params params;
-  TouchEvent event;
+  float pitch, sel, gain;
 };
 
 class MidiGrainSequence : public GrainSequence {
@@ -164,14 +164,18 @@ private:
 
 class GrainSynth : public juce::Synthesiser {
 public:
+  struct TouchEvent {
+    int sourceId;
+    TouchGrainSequence::TouchEvent grain;
+  };
+
   GrainSynth(GrainData &grainData, int numVoices);
   ~GrainSynth() override;
 
-  void changeSound(GrainIndex &, const GrainSound::Params &);
+  void changeSound(GrainIndex &, const MidiGrainSequence::MidiParams &);
   GrainSound::Ptr latestSound();
 
-  void mouseInputForGrain(unsigned grainId, bool isDown, int sourceId);
-
+  void touchEvent(const TouchGrainSequence::TouchEvent &);
   void addListener(GrainVoice::Listener *);
   void removeListener(GrainVoice::Listener *);
 
