@@ -382,8 +382,8 @@ juce::int64 GrainWaveformCache::sizeInBytes() {
   return totalBytes;
 }
 
-std::size_t
-GrainWaveformCache::Hasher::operator()(GrainWaveform::Key const &key) const {
+std::size_t GrainWaveformCache::Hasher::
+operator()(GrainWaveform::Key const &key) const {
   return key.grain ^ int(key.speedRatio * 1e3) ^ int(key.window.mix * 3e3) ^
          (key.window.width0 * 2) ^ (key.window.width1 * 3) ^ key.window.phase1;
 }
