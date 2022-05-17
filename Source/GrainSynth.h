@@ -9,23 +9,24 @@ class GrainSequence {
 public:
   using Ptr = std::unique_ptr<GrainSequence>;
   using Rng = std::mt19937;
+  using Gains = std::array<float, 2>;
 
   struct Point {
     GrainWaveform::Key waveKey;
-    float gain;
     int samplesUntilNextPoint;
+    Gains gains;
   };
 
   struct Params {
     GrainWaveform::Window::Params windowParams;
     float sampleRate, grainRate, grainRateSpread;
-    float selSpread, pitchSpread;
+    float selSpread, pitchSpread, stereoSpread;
     float speedWarp, gainDbLow, gainDbHigh;
 
     float speedRatio(const GrainIndex &) const;
     GrainWaveform::Window window(const GrainIndex &index) const;
     unsigned chooseGrain(const GrainIndex &, float pitch, float sel);
-    float velocityToGain(float velocity) const;
+    Gains velocityToGains(Rng &, float) const;
     int samplesUntilNextPoint(Rng &) const;
     float selNoise(Rng &, float) const;
     float pitchNoise(Rng &, float) const;
@@ -48,7 +49,7 @@ public:
 private:
   GrainIndex &index;
   Params params;
-  float pitch, sel, gain;
+  TouchEvent event;
 };
 
 class MidiGrainSequence : public GrainSequence {
@@ -148,7 +149,7 @@ private:
   std::mutex listenerMutex;
   juce::ListenerList<Listener> listeners;
 
-  GrainSequence::Rng prng;
+  GrainSequence::Rng rng;
   GrainSequence::Ptr sequence;
   std::deque<Grain> queue;
   Reservoir reservoir;
@@ -172,7 +173,7 @@ public:
   void changeSound(GrainIndex &, const MidiGrainSequence::MidiParams &);
   GrainSound::Ptr latestSound();
 
-  void touchEvent(const TouchGrainSequence::TouchEvent &);
+  void touchEvent(const TouchEvent &);
   void addListener(GrainVoice::Listener *);
   void removeListener(GrainVoice::Listener *);
 

@@ -38,6 +38,9 @@ RvvProcessor::RvvProcessor()
                     "sel_spread", "Sel Spread",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
                 std::make_unique<juce::AudioParameterFloat>(
+                    "stereo_spread", "Stereo Spread",
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
+                std::make_unique<juce::AudioParameterFloat>(
                     "pitch_spread", "Pitch Spread",
                     juce::NormalisableRange<float>(0.0f, 8.0f), 0.0f),
                 std::make_unique<juce::AudioParameterFloat>(
@@ -140,29 +143,34 @@ void RvvProcessor::attachToState() {
 void RvvProcessor::updateSoundFromState() {
   GrainIndex::Ptr index = grainData.getIndex();
   if (index != nullptr && index->isValid()) {
-    synth.changeSound(
-        *index,
-        {.sampleRate = synth.getSampleRate(),
-         .grainRate = state.getParameterAsValue("grain_rate").getValue(),
-         .window =
-             {
-                 .mix = state.getParameterAsValue("win_mix").getValue(),
-                 .width0 = state.getParameterAsValue("win_width0").getValue(),
-                 .width1 = state.getParameterAsValue("win_width1").getValue(),
-                 .phase1 = state.getParameterAsValue("win_phase1").getValue(),
-             },
-         .sequence = {
-             .selCenter = state.getParameterAsValue("sel_center").getValue(),
-             .selMod = state.getParameterAsValue("sel_mod").getValue(),
-             .selSpread = state.getParameterAsValue("sel_spread").getValue(),
-             .speedWarp = state.getParameterAsValue("speed_warp").getValue(),
-             .pitchSpread =
-                 state.getParameterAsValue("pitch_spread").getValue(),
-             .pitchBendRange =
-                 state.getParameterAsValue("pitch_bend_range").getValue(),
-             .gainDbLow = state.getParameterAsValue("gain_db_low").getValue(),
-             .gainDbHigh = state.getParameterAsValue("gain_db_high").getValue(),
-         }});
+    auto windowParams = GrainWaveform::Window::Params{
+        .mix = state.getParameterAsValue("win_mix").getValue(),
+        .width0 = state.getParameterAsValue("win_width0").getValue(),
+        .width1 = state.getParameterAsValue("win_width1").getValue(),
+        .phase1 = state.getParameterAsValue("win_phase1").getValue(),
+    };
+    auto commonParams = GrainSequence::Params{
+        .windowParams = windowParams,
+        .sampleRate = float(synth.getSampleRate()),
+        .grainRate = state.getParameterAsValue("grain_rate").getValue(),
+        .grainRateSpread =
+            state.getParameterAsValue("grain_rate_spread").getValue(),
+        .selSpread = state.getParameterAsValue("sel_spread").getValue(),
+        .pitchSpread = state.getParameterAsValue("pitch_spread").getValue(),
+        .stereoSpread = state.getParameterAsValue("stereo_spread").getValue(),
+        .speedWarp = state.getParameterAsValue("speed_warp").getValue(),
+        .gainDbLow = state.getParameterAsValue("gain_db_low").getValue(),
+        .gainDbHigh = state.getParameterAsValue("gain_db_high").getValue(),
+    };
+    auto params = MidiGrainSequence::MidiParams{
+        .common = commonParams,
+        .selCenter = state.getParameterAsValue("sel_center").getValue(),
+        .selMod = state.getParameterAsValue("sel_mod").getValue(),
+        .pitchBendRange =
+            state.getParameterAsValue("pitch_bend_range").getValue(),
+
+    };
+    synth.changeSound(*index, params);
   }
 }
 
@@ -172,7 +180,7 @@ void RvvProcessor::touchEvent(const GrainSynth::TouchEvent &event) {
 }
 
 void RvvProcessor::processInputQueue() {
-  juce::Array<MouseInputItem> items;
+  juce::Array<GrainSynth::TouchEvent> items;
   {
     std::lock_guard<std::mutex> guard(inputQueueMutex);
     inputQueue.swapWith(items);

@@ -6,59 +6,65 @@ float GrainSequence::Params::speedRatio(const GrainIndex &index) const {
   return index.sampleRate / sampleRate * speedWarp;
 }
 
-GrainWaveform::Window window(const GrainIndex &index) const {
-  return GrainWaveform::Window(index->maxGrainWidthSamples() / speedRatio,
+GrainWaveform::Window
+GrainSequence::Params::window(const GrainIndex &index) const {
+  return GrainWaveform::Window(index.maxGrainWidthSamples() / speedRatio(index),
                                windowParams);
 }
 
-unsigned GrainSequence::Params::chooseGrain(const GrainIndex &, float pitch,
-                                            float sel) {
+unsigned GrainSequence::Params::chooseGrain(const GrainIndex &index,
+                                            float pitch, float sel) {
   auto bin = index.closestBinForPitch(pitch / speedWarp);
   auto grains = index.grainsForBin(bin);
   auto sel01 = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
   return std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
 }
 
-float GrainSequence::Params::velocityToGain(float velocity) const {
-  return juce::Decibels::decibelsToGain(
+GrainSequence::Gains
+GrainSequence::Params::velocityToGains(Rng &rng, float velocity) const {
+  std::uniform_real_distribution<> uniform(-0.5f, 0.5f);
+  float panning = 0.5f + uniform(rng) * stereoSpread;
+  float gain = juce::Decibels::decibelsToGain(
       juce::jmap(velocity, gainDbLow, gainDbHigh));
+  return {gain * (1.f - panning), gain * panning};
 }
 
-int GrainSequence::Params::samplesUntilNextPoint(Rng &prng) const {
-  std::uniform_real_distribution<> uniform(-1., 1.);
-  auto noisyGrainRate =
-      std::max(0.01f, grainRate * (1.f + grainRateSpread * uniform(prng)));
-  return sampleRate / noisyGrainRate;
+int GrainSequence::Params::samplesUntilNextPoint(Rng &rng) const {
+  std::uniform_real_distribution<> uniform(-1.f, 1.f);
+  float noise = uniform(rng);
+  auto noisyRate = std::max(0.01f, grainRate * (1.f + grainRateSpread * noise));
+  return sampleRate / noisyRate;
 }
 
-float GrainSequence::Params::selNoise(Rng &prng, float input) const {
-  std::uniform_real_distribution<> uniform(-1., 1.);
-  return input + selSpread * uniform(prng);
+float GrainSequence::Params::selNoise(Rng &rng, float input) const {
+  std::uniform_real_distribution<> uniform(-1.f, 1.f);
+  return input + selSpread * uniform(rng);
 }
 
-float GrainSequence::Params::pitchNoise(Rng &prng, float input) const {
-  std::uniform_real_distribution<> uniform(-1., 1.);
-  return input * (1.f + pitchSpread * uniform(prng));
+float GrainSequence::Params::pitchNoise(Rng &rng, float input) const {
+  std::uniform_real_distribution<> uniform(-1.f, 1.f);
+  return input * (1.f + pitchSpread * uniform(rng));
 }
 
 TouchGrainSequence::TouchGrainSequence(GrainIndex &index, const Params &params,
                                        const TouchEvent &event)
-    : index(index), params(params), pitch(event.pitch), sel(event.sel),
-      gain(params.velocityToGain(event.velocity)) {}
+    : index(index), params(params), event(event) {}
 
 TouchGrainSequence::~TouchGrainSequence() {}
 
-GrainSequence::Point TouchGrainSequence::generate(Rng &prng) {
+GrainSequence::Point TouchGrainSequence::generate(Rng &rng) {
+  auto pitch = params.pitchNoise(rng, event.pitch);
+  auto sel = params.selNoise(rng, event.sel);
   return Point{
       .waveKey =
           {
-              .grain = params.chooseGrain(index, params.pitchNoise(prng, pitch),
-                                          params.selNoise(prng, sel)),
+              .grain = params.chooseGrain(index, pitch, sel),
               .speedRatio = params.speedRatio(index),
               .window = params.window(index),
           },
-      .gain = gain,
-      .samplesUntilNextPoint = params.samplesUntilNextPoint(prng)};
+      .samplesUntilNextPoint = params.samplesUntilNextPoint(rng),
+      .gains = params.velocityToGains(rng, event.velocity),
+  };
 }
 
 MidiGrainSequence::MidiGrainSequence(GrainIndex &index,
@@ -68,11 +74,12 @@ MidiGrainSequence::MidiGrainSequence(GrainIndex &index,
 
 MidiGrainSequence::~MidiGrainSequence() {}
 
-GrainSequence::Point MidiGrainSequence::generate(Rng &prng) {
+GrainSequence::Point MidiGrainSequence::generate(Rng &rng) {
   auto sel =
       params.selCenter + params.selMod * (event.modWheel / 128.0f - 0.5f);
   auto bend = params.pitchBendRange * (event.pitchWheel / 8192.0f - 1.0f);
   auto pitch = 440.0f * std::pow(2.0f, (event.note + bend - 69.0f) / 12.0f);
+  auto gains = params.common.velocityToGains(rng, event.velocity);
   return Point{
       .waveKey =
           {
@@ -81,8 +88,9 @@ GrainSequence::Point MidiGrainSequence::generate(Rng &prng) {
               .speedRatio = params.speedRatio(index),
               .window = params.window(index),
           },
-      .gain = params.velocityToGain(midi.velocity),
-      .samplesUntilNextPoint = params.samplesUntilNextPoint(prng)};
+      .samplesUntilNextPoint = params.samplesUntilNextPoint(prng),
+      .gains = gains,
+  };
 }
 
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
@@ -112,8 +120,9 @@ void GrainSynth::touchEvent(int sourceId,
   if (voice) {
     if (event.velocity > 0.f) {
       if (!voice->isVoiceActive()) {
-        // We don't seem to have a direct way to start a juce::SynthesiserVoice
-        // without also triggering a midi note that we need to dequeue.
+        // We don't seem to have a direct way to start a
+        // juce::SynthesiserVoice without also triggering a midi note that we
+        // need to dequeue.
         startVoice(voice, sound, 0, 0, 0);
         voice->clearGrainQueue();
       }
@@ -443,8 +452,9 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
         return;
 
       } else {
-        // We are already playing and there's a missing grain that overlaps with
-        // grains we are already playing, so we can't just pause. Silence it.
+        // We are already playing and there's a missing grain that overlaps
+        // with grains we are already playing, so we can't just pause. Silence
+        // it.
         auto key = sound.waveformKeyForGrain(grain.seq.grain);
         grain.wave = new GrainWaveform(key, 0, 0);
       }

@@ -243,7 +243,8 @@ private:
 class MapPanel::LiveOverlay : private GrainWaveformCache::Listener,
                               private GrainVoice::Listener {
 public:
-  LiveOverlay(GrainIndex &ix, GrainSynth &synth) : index(ix), synth(synth) {
+  LiveOverlay(GrainIndex &index, GrainSynth &synth)
+      : index(index), synth(synth) {
     index->cache.addListener(this);
     synth.addListener(this);
   }
@@ -253,7 +254,8 @@ public:
     synth.removeListener(this);
   }
 
-  GrainIndex &getIndex() { return *index; }
+  GrainIndex::Ptr index;
+  GrainSynth &synth;
 
   struct Colors {
     juce::Colour loading, visited, playing, outline;
@@ -280,8 +282,6 @@ public:
   }
 
 private:
-  GrainIndex::Ptr index;
-  GrainSynth &synth;
   juce::SortedSet<unsigned> loading;
   struct {
     std::mutex mutex;
@@ -329,7 +329,7 @@ private:
   void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
                          int sampleNum, int sampleCount) override {
-    if (sound.isUsingSameIndex(getIndex())) {
+    if (index == sound.index) {
       jassert(wave.key.grain < index->numGrains());
       std::lock_guard<std::mutex> guard(collector.mutex);
       collector.playing.add(wave.key.grain);
