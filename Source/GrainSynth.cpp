@@ -20,13 +20,20 @@ unsigned GrainSequence::Params::chooseGrain(const GrainIndex &index,
   return std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
 }
 
+unsigned GrainSequence::Params::chooseGrainWithNoise(const GrainIndex &index,
+                                                     Rng &rng, float pitch,
+                                                     float sel) {
+  return chooseGrain(index, pitchNoise(rng, pitch), selNoise(rng, pitch));
+}
+
 GrainSequence::Gains
 GrainSequence::Params::velocityToGains(Rng &rng, float velocity) const {
-  std::uniform_real_distribution<> uniform(-0.5f, 0.5f);
-  float panning = 0.5f + uniform(rng) * stereoSpread;
-  float gain = juce::Decibels::decibelsToGain(
-      juce::jmap(velocity, gainDbLow, gainDbHigh));
-  return {gain * (1.f - panning), gain * panning};
+  std::uniform_real_distribution<> uniform(-1.f, 1.f);
+  float position = stereoCenter + uniform(rng) * stereoSpread;
+  float balance = 0.5f + 0.5f * juce::jlimit(-1.f, 1.f, position);
+  float gainDb = juce::jmap(velocity, gainDbLow, gainDbHigh);
+  float gain = juce::Decibels::decibelsToGain(gainDb);
+  return {gain * (1.f - balance), gain * balance};
 }
 
 int GrainSequence::Params::samplesUntilNextPoint(Rng &rng) const {
@@ -53,12 +60,11 @@ TouchGrainSequence::TouchGrainSequence(GrainIndex &index, const Params &params,
 TouchGrainSequence::~TouchGrainSequence() {}
 
 GrainSequence::Point TouchGrainSequence::generate(Rng &rng) {
-  auto pitch = params.pitchNoise(rng, event.pitch);
-  auto sel = params.selNoise(rng, event.sel);
   return Point{
       .waveKey =
           {
-              .grain = params.chooseGrain(index, pitch, sel),
+              .grain = params.chooseGrainWithNoise(index, rng, event.pitch,
+                                                   event.sel),
               .speedRatio = params.speedRatio(index),
               .window = params.window(index),
           },
@@ -75,50 +81,50 @@ MidiGrainSequence::MidiGrainSequence(GrainIndex &index,
 MidiGrainSequence::~MidiGrainSequence() {}
 
 GrainSequence::Point MidiGrainSequence::generate(Rng &rng) {
-  auto sel =
-      params.selCenter + params.selMod * (event.modWheel / 128.0f - 0.5f);
   auto bend = params.pitchBendRange * (event.pitchWheel / 8192.0f - 1.0f);
   auto pitch = 440.0f * std::pow(2.0f, (event.note + bend - 69.0f) / 12.0f);
-  auto gains = params.common.velocityToGains(rng, event.velocity);
+  auto sel =
+      params.selCenter + params.selMod * (event.modWheel / 128.0f - 0.5f);
   return Point{
       .waveKey =
           {
-              .grain = params.chooseGrain(index, params.pitchNoise(prng, pitch),
-                                          params.selNoise(prng, sel)),
-              .speedRatio = params.speedRatio(index),
-              .window = params.window(index),
+              .grain =
+                  params.common.chooseGrainWithNoise(index, rng, pitch, sel),
+              .speedRatio = params.common.speedRatio(index),
+              .window = params.common.window(index),
           },
-      .samplesUntilNextPoint = params.samplesUntilNextPoint(prng),
-      .gains = gains,
+      .samplesUntilNextPoint = params.common.samplesUntilNextPoint(rng),
+      .gains = params.common.velocityToGains(rng, event.velocity),
   };
 }
 
 GrainSynth::GrainSynth(GrainData &grainData, int numVoices) {
-  GrainSequence::Rng seedGenerator;
+  GrainSequence::Rng seedRng;
   for (auto i = 0; i < juce::numElementsInArray(lastModWheelValues); i++) {
     lastModWheelValues[i] = 64;
   }
   for (auto i = 0; i < numVoices; i++) {
-    addVoice(new GrainVoice(grainData, seedGenerator()));
+    GrainSequence::Rng voiceRng(seedRng());
+    addVoice(new GrainVoice(grainData, voiceRng));
   }
 }
 
 GrainSynth::~GrainSynth() {}
 
-void GrainSynth::touchEvent(int sourceId,
-                            const TouchGrainSequence::TouchEvent &event) {
+void GrainSynth::touchEvent(const TouchEvent &event) {
   juce::ScopedLock sl(lock);
   auto sound = dynamic_cast<GrainSound *>(getSound(0).get());
   if (sound == nullptr) {
     return;
   }
-  if (event.velocity > 0.f && !voiceForInputSource.contains(sourceId)) {
+  if (event.grain.velocity > 0.f &&
+      !voiceForInputSource.contains(event.sourceId)) {
     auto voice = findFreeVoice(getSound(0).get(), -1, -1, true);
-    voiceForInputSource.set(sourceId, dynamic_cast<GrainVoice *>(voice));
+    voiceForInputSource.set(event.sourceId, dynamic_cast<GrainVoice *>(voice));
   }
-  auto voice = voiceForInputSource[sourceId];
+  auto voice = voiceForInputSource[event.sourceId];
   if (voice) {
-    if (event.velocity > 0.f) {
+    if (event.grain.velocity > 0.f) {
       if (!voice->isVoiceActive()) {
         // We don't seem to have a direct way to start a
         // juce::SynthesiserVoice without also triggering a midi note that we
@@ -126,10 +132,10 @@ void GrainSynth::touchEvent(int sourceId,
         startVoice(voice, sound, 0, 0, 0);
         voice->clearGrainQueue();
       }
-      voice->startTouch(event);
+      voice->startTouch(event.grain);
     } else {
       stopVoice(voice, 0, true);
-      voiceForInputSource.remove(sourceId);
+      voiceForInputSource.remove(event.sourceId);
     }
   }
 }
@@ -140,7 +146,7 @@ GrainSound::Ptr GrainSynth::latestSound() {
 }
 
 void GrainSynth::changeSound(GrainIndex &index,
-                             const GrainSound::Params &params) {
+                             const MidiGrainSequence::MidiParams &params) {
   auto newSound = new GrainSound(index, params);
   juce::ScopedLock sl(lock);
   sounds.clear();
@@ -184,11 +190,9 @@ void GrainSynth::removeListener(GrainVoice::Listener *listener) {
   }
 }
 
-GrainSound::GrainSound(GrainIndex &index, const Params &params)
-    : index(index), params(params),
-      speedRatio(index.sampleRate / params.sampleRate *
-                 params.sequence.speedWarp),
-      window(maxGrainWidthSamples(), params.window) {}
+GrainSound::GrainSound(GrainIndex &index,
+                       const MidiGrainSequence::MidiParams &params)
+    : index(index), params(params) {}
 
 GrainSound::~GrainSound() {}
 bool GrainSound::appliesToNote(int) { return true; }

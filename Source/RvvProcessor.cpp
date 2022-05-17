@@ -38,6 +38,9 @@ RvvProcessor::RvvProcessor()
                     "sel_spread", "Sel Spread",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
                 std::make_unique<juce::AudioParameterFloat>(
+                    "stereo_center", "Stereo Center",
+                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f),
+                std::make_unique<juce::AudioParameterFloat>(
                     "stereo_spread", "Stereo Spread",
                     juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
                 std::make_unique<juce::AudioParameterFloat>(

@@ -16,6 +16,7 @@ public:
 
   struct PointInfo {
     bool valid;
+    float pitch, sel;
     unsigned bin, grain;
     juce::uint64 sample;
   };
@@ -26,13 +27,14 @@ public:
 
       // X axis: logarithmic pitch
       float relX = (p.x - bounds.getX()) / (bounds.getWidth() - 1);
-      result.bin = index.closestBinForPitch(pitchRange.getStart() *
-                                            exp(relX * logPitchRatio));
+      result.pitch = pitchRange.getStart() * exp(relX * logPitchRatio);
+      result.bin = index.closestBinForPitch(result.pitch);
 
       // Y axis: linear grain selector, variable resolution
       auto gr = index.grainsForBin(result.bin);
-      float relY = 1.f - (p.y - bounds.getY()) / bounds.getHeight();
-      result.grain = gr.clipValue(gr.getStart() + gr.getLength() * relY);
+      float relY = (p.y - bounds.getY()) / bounds.getHeight();
+      result.sel = 1.f - relY;
+      result.grain = gr.clipValue(gr.getStart() + gr.getLength() * result.sel);
       result.sample = index.grainX[result.grain];
       return result;
     } else {
@@ -245,7 +247,7 @@ class MapPanel::LiveOverlay : private GrainWaveformCache::Listener,
 public:
   LiveOverlay(GrainIndex &index, GrainSynth &synth)
       : index(index), synth(synth) {
-    index->cache.addListener(this);
+    index.cache.addListener(this);
     synth.addListener(this);
   }
 
@@ -418,15 +420,21 @@ void MapPanel::requestNewImage(GrainIndex &index) {
 }
 
 void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool isDown) {
-  auto source = e.source.getIndex();
+  float pitch = 0.f, sel = 0.f, velocity = 0.f;
   auto index = processor.grainData.getIndex();
   if (index != nullptr && index->isValid()) {
     Layout layout(getLocalBounds().toFloat(), *index);
     auto point = layout.pointInfo(e.getEventRelativeTo(this).position);
-    processor.mouseInputForGrain(point.grain, isDown && point.valid, source);
-  } else {
-    processor.mouseInputForGrain(0, false, source);
+    if (point.valid) {
+      pitch = point.pitch;
+      sel = point.sel;
+      velocity = 0.7f;
+    }
   }
+  processor.touchEvent({
+      .sourceId = e.source.getIndex(),
+      .grain = {pitch, sel, velocity},
+  });
 }
 
 void MapPanel::changeListenerCallback(juce::ChangeBroadcaster *) {

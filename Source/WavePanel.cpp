@@ -15,7 +15,7 @@ public:
   void grainVoicePlaying(const GrainVoice &, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
                          int sampleNum, int sampleCount) override {
-    auto maxWidth = sound.maxGrainWidthSamples();
+    auto maxWidth = sound.index->maxGrainWidthSamples();
     std::lock_guard<std::mutex> guard(collectorMutex);
     maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
     if (collector) {
@@ -24,7 +24,7 @@ public:
   }
 
   void visualizeSoundSettings(const GrainSound &sound) {
-    auto maxWidth = sound.maxGrainWidthSamples();
+    auto maxWidth = sound.index->maxGrainWidthSamples();
     std::lock_guard<std::mutex> guard(collectorMutex);
     maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
     if (collector) {
