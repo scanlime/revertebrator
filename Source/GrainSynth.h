@@ -82,23 +82,10 @@ public:
   bool appliesToNote(int) override;
   bool appliesToChannel(int) override;
 
-  GrainIndex &getIndex();
-  bool isUsingSameIndex(GrainIndex &ix) const;
-  double grainRepeatsPerSample() const;
-  double outputSampleRate() const;
-  int targetQueueDepth() const;
-  float maxGrainWidthSamples() const;
-  const GrainWaveform::Window &getWindow() const;
-  GrainWaveform::Key waveformKeyForGrain(unsigned grain) const;
-  GrainSequence::Ptr grainSequence(const MidiGrainSequence::MidiState &midi);
-  GrainSequence::Ptr grainSequence(float pitch, float sel, float velocity);
+  GrainIndex::Ptr index;
+  MidiGrainSequence::MidiParams params;
 
 private:
-  GrainIndex::Ptr index;
-  Params params;
-  float speedRatio, maxWidthSamples;
-  GrainWaveform::Window window;
-
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GrainSound)
 };
 
@@ -125,8 +112,6 @@ public:
 
   void addListener(Listener *);
   void removeListener(Listener *);
-
-  void startGrain(unsigned grain, float velocity);
 
   void clearGrainQueue();
   void replaceReservoirWithQueuedGrains();
