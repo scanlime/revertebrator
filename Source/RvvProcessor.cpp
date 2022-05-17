@@ -162,6 +162,7 @@ void RvvProcessor::updateSoundFromState() {
         .pitchSpread = state.getParameterAsValue("pitch_spread").getValue(),
         .stereoSpread = state.getParameterAsValue("stereo_spread").getValue(),
         .speedWarp = state.getParameterAsValue("speed_warp").getValue(),
+        .stereoCenter = state.getParameterAsValue("stereo_center").getValue(),
         .gainDbLow = state.getParameterAsValue("gain_db_low").getValue(),
         .gainDbHigh = state.getParameterAsValue("gain_db_high").getValue(),
     };

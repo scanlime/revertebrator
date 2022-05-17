@@ -32,7 +32,7 @@ unsigned GrainSequence::Params::chooseGrainWithNoise(const GrainIndex &index,
 
 GrainSequence::Gains
 GrainSequence::Params::velocityToGains(Rng &rng, float velocity) const {
-  std::uniform_real_distribution<> uniform(-1.f, 1.f);
+  std::uniform_real_distribution<> uniform(-2.f, 2.f);
   float position = stereoCenter + uniform(rng) * stereoSpread;
   float balance = 0.5f + 0.5f * juce::jlimit(-1.f, 1.f, position);
   float gainDb = juce::jmap(velocity, gainDbLow, gainDbHigh);
@@ -41,10 +41,15 @@ GrainSequence::Params::velocityToGains(Rng &rng, float velocity) const {
 }
 
 int GrainSequence::Params::samplesUntilNextPoint(Rng &rng) const {
-  std::uniform_real_distribution<> uniform(-1.f, 1.f);
-  float noise = uniform(rng);
-  auto noisyRate = std::max(0.01f, grainRate * (1.f + grainRateSpread * noise));
-  return sampleRate / noisyRate;
+  if (grainRate > 0.f) {
+    std::uniform_real_distribution<> uniform(-1.f, 1.f);
+    float noise = uniform(rng);
+    auto noisyRate =
+        std::max(0.01f, grainRate * (1.f + grainRateSpread * noise));
+    return std::max<int>(1, sampleRate / noisyRate);
+  } else {
+    return 0;
+  }
 }
 
 float GrainSequence::Params::selNoise(Rng &rng, float input) const {
@@ -463,7 +468,7 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
       for (int ch = 0; ch < outChannels; ch++) {
         outputBuffer.addFrom(ch, startSample + copyDest, wave.buffer,
                              ch % inChannels, copySource, copySize,
-                             gains[ch & gains.size()]);
+                             gains[ch % gains.size()]);
       }
     }
 
