@@ -69,6 +69,14 @@ public:
     }
   };
 
+  struct Hasher {
+    inline std::size_t operator()(Key const &key) const noexcept {
+      return key.grain ^ int(key.speedRatio * 1e3) ^ int(key.window.mix * 3e3) ^
+             (key.window.width0 * 2) ^ (key.window.width1 * 3) ^
+             key.window.phase1;
+    }
+  };
+
   GrainWaveform(const Key &, int channels, int samples);
   ~GrainWaveform() override;
 
@@ -111,15 +119,11 @@ private:
     int cleanupCounter{0};
   };
 
-  struct Hasher {
-    std::size_t operator()(GrainWaveform::Key const &key) const;
-  };
-
   std::mutex listenerMutex;
   juce::ListenerList<Listener> listeners;
 
   std::mutex cacheMutex;
-  std::unordered_map<GrainWaveform::Key, Item, Hasher> map;
+  std::unordered_map<GrainWaveform::Key, Item, GrainWaveform::Hasher> map;
   juce::int64 totalBytes{0};
   int cleanupCounter{0};
 };

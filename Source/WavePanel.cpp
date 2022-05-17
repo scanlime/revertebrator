@@ -15,7 +15,7 @@ public:
   void grainVoicePlaying(const GrainVoice &, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
                          int sampleNum, int sampleCount) override {
-    auto maxWidth = sound.index->maxGrainWidthSamples();
+    auto maxWidth = sound.params.common.maxGrainWidthSamples(*sound.index);
     std::lock_guard<std::mutex> guard(collectorMutex);
     maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
     if (collector) {
@@ -24,11 +24,11 @@ public:
   }
 
   void visualizeSoundSettings(const GrainSound &sound) {
-    auto maxWidth = sound.index->maxGrainWidthSamples();
+    auto maxWidth = sound.params.common.maxGrainWidthSamples(*sound.index);
     std::lock_guard<std::mutex> guard(collectorMutex);
     maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
     if (collector) {
-      collector->windows.push_back(sound.getWindow());
+      collector->windows.push_back(sound.params.common.window(*sound.index));
     }
   }
 
@@ -198,7 +198,7 @@ private:
           std::max<float>(0, centerColumn() + sampleStart / samplesPerColumn),
           std::min<float>(numColumns,
                           centerColumn() + sampleEnd / samplesPerColumn),
-          seq.gain);
+          1.f /* fixme */);
     }
 
     juce::Path pathForWindow(const GrainWaveform::Window &window,

@@ -361,7 +361,6 @@ private:
 
 GrainWaveform::GrainWaveform(const Key &key, int channels, int samples)
     : key(key), buffer(channels, samples) {}
-
 GrainWaveform::~GrainWaveform() {}
 
 GrainIndex::GrainIndex(const juce::File &file) : file(file), status(load()) {}
@@ -380,12 +379,6 @@ void GrainWaveformCache::removeListener(Listener *listener) {
 juce::int64 GrainWaveformCache::sizeInBytes() {
   std::lock_guard<std::mutex> guard(cacheMutex);
   return totalBytes;
-}
-
-std::size_t
-GrainWaveformCache::Hasher::operator()(GrainWaveform::Key const &key) const {
-  return key.grain ^ int(key.speedRatio * 1e3) ^ int(key.window.mix * 3e3) ^
-         (key.window.width0 * 2) ^ (key.window.width1 * 3) ^ key.window.phase1;
 }
 
 void GrainWaveformCache::cleanup(int inactivityThreshold) {

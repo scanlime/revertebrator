@@ -24,6 +24,7 @@ public:
     float speedWarp, stereoCenter, gainDbLow, gainDbHigh;
 
     float speedRatio(const GrainIndex &) const;
+    float maxGrainWidthSamples(const GrainIndex &) const;
     GrainWaveform::Window window(const GrainIndex &) const;
     unsigned chooseGrain(const GrainIndex &, float pitch, float sel);
     unsigned chooseGrainWithNoise(const GrainIndex &, Rng &, float pitch,
@@ -44,14 +45,15 @@ public:
     float pitch, sel, velocity;
   };
 
+  Params params;
+  TouchEvent event;
+
   TouchGrainSequence(GrainIndex &, const Params &, const TouchEvent &);
   ~TouchGrainSequence() override;
   Point generate(Rng &) override;
 
 private:
   GrainIndex &index;
-  Params params;
-  TouchEvent event;
 };
 
 class MidiGrainSequence : public GrainSequence {
@@ -66,14 +68,15 @@ public:
     float velocity;
   };
 
+  MidiParams params;
+  MidiEvent event;
+
   MidiGrainSequence(GrainIndex &, const MidiParams &, const MidiEvent &);
   ~MidiGrainSequence() override;
   Point generate(Rng &) override;
 
 private:
   GrainIndex &index;
-  MidiParams params;
-  MidiEvent event;
 };
 
 class GrainSound : public juce::SynthesiserSound {
@@ -134,13 +137,13 @@ private:
 
   private:
     std::deque<Grain> grains;
-    juce::SortedSet<unsigned> set;
+    std::unordered_set<GrainWaveform::Key, GrainWaveform::Hasher> set;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Reservoir);
   };
 
   void fillQueueForSound(const GrainSound &);
   void fetchQueueWaveforms(GrainSound &);
-  int numActiveGrainsInQueue(const GrainSound &);
+  int numActiveGrainsInQueue();
   void trimQueueToLength(int);
   void trimAndRefillQueue(int);
   void renderFromQueue(const GrainSound &, juce::AudioBuffer<float> &, int,
