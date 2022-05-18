@@ -328,9 +328,9 @@ private:
     collector.stopLoading.add(key.grain);
   }
 
-  void grainVoicePlaying(const GrainVoice &voice, const GrainSound &sound,
-                         GrainWaveform &wave, const GrainSequence::Point &seq,
-                         int sampleNum, int sampleCount) override {
+  void grainVoicePlaying(const GrainVoice &, const GrainSound &sound,
+                         GrainWaveform &wave, const GrainSequence::Point &,
+                         const juce::Range<int> &) override {
     if (index == sound.index) {
       jassert(wave.key.grain < index->numGrains());
       std::lock_guard<std::mutex> guard(collector.mutex);

@@ -1,38 +1,152 @@
 #include "WavePanel.h"
+#include "GrainSynth.h"
 
-class WavePanel::ImageRender : public juce::Thread,
-                               public juce::ChangeBroadcaster,
-                               public GrainVoice::Listener {
+class WavePanel::ImageBuilder {
 public:
-  ImageRender(GrainSynth &synth) : Thread("wave-image"), synth(synth) {}
-  ~ImageRender() override {}
-
-  struct Request {
+  struct Params {
     juce::Rectangle<int> bounds;
     juce::Colour background, highlight;
   };
 
+  struct WavePlayback {
+    GrainSequence::Point seq;
+    juce::Range<int> samples;
+  };
+
+  struct WaveInfo {
+    GrainWaveform::Ptr wave;
+    std::vector<WavePlayback> playing;
+  };
+
+  struct State {
+    std::vector<GrainWaveform::Window> windows;
+    std::unordered_map<GrainWaveform *, WaveInfo> waves;
+    float widthInSamples{0.f};
+
+    void ensureWidth(float minimum) {
+      widthInSamples = std::max(widthInSamples, minimum);
+    }
+
+    void addPlayback(GrainWaveform &wave, const WavePlayback &playback) {
+      auto &slot = waves[&wave];
+      if (slot.wave == nullptr) {
+        slot.wave = wave;
+      }
+      jassert(slot.wave.get() == &wave);
+      slot.playing.push_back(playback);
+    }
+
+    void addSoundWindow(const GrainSound &sound) {
+      ensureWidth(sound.params.common.maxGrainWidthSamples(*sound.index));
+      windows.push_back(sound.params.common.window(*sound.index));
+    }
+  };
+
+  ImageBuilder(const Params &params, const State &state)
+      : params(params), state(state) {}
+  ~ImageBuilder() {}
+
+  std::unique_ptr<juce::Image> run() {
+    if (params.bounds.isEmpty()) {
+      return nullptr;
+    }
+    auto image = std::make_unique<juce::Image>(juce::Image::RGB, width(),
+                                               height(), false);
+
+    juce::Graphics g(*image);
+    g.fillAll(params.background);
+    g.setColour(params.background.contrasting(1.f));
+
+    // Faint outline of all active window functions
+    for (auto window : collectUniqueWaveformWindows()) {
+      g.setOpacity(0.2f);
+      g.strokePath(pathForWindow(window), juce::PathStrokeType(2.f));
+    }
+
+    // Highlighted window functions
+    g.setColour(params.highlight);
+    for (auto &window : state.windows) {
+      g.setOpacity(0.4f);
+      g.strokePath(pathForWindow(window), juce::PathStrokeType(3.5f));
+    }
+
+    g.setColour(params.highlight);
+    drawCenterColumn(g);
+
+    return image;
+  }
+
+private:
+  int width() const { return params.bounds.getWidth(); }
+  int height() const { return params.bounds.getHeight(); }
+  int centerColumn() const { return width() / 2; }
+  float samplesPerColumn() const { return 2 * state.widthInSamples / width(); }
+
+  void drawCenterColumn(juce::Graphics &g) {
+    auto thick = 2.5f, margin = 1.f;
+    auto x = centerColumn(), h = height();
+    g.drawLine(x, margin + thick, x, h - thick - margin, thick);
+    g.fillEllipse(x - thick, margin, thick * 2, thick * 2);
+    g.fillEllipse(x - thick, h - margin - thick * 2, thick * 2, thick * 2);
+  }
+
+  std::vector<GrainWaveform::Window> collectUniqueWaveformWindows() const {
+    std::vector<GrainWaveform::Window> result;
+    for (auto &item : state.waves) {
+      auto w = item.second.wave->key.window;
+      if (std::find(state.windows.begin(), state.windows.end(), w) ==
+              state.windows.end() &&
+          std::find(result.begin(), result.end(), w) == result.end()) {
+        result.push_back(w);
+      }
+    }
+    return result;
+  }
+
+  juce::Path pathForWindow(const GrainWaveform::Window &window) const {
+    juce::Path path;
+    const float top = height() * 0.1f;
+    const float bottom = height() * 0.9f;
+    auto peak = window.peakValue();
+    auto spc = samplesPerColumn();
+    for (int col = 0; col < width(); col++) {
+      auto x = (col - centerColumn()) * spc;
+      auto normalized = window.evaluate(x) / peak;
+      auto y = bottom + normalized * (top - bottom);
+      if (col == 0) {
+        path.startNewSubPath(col, y);
+      } else {
+        path.lineTo(col, y);
+      }
+    }
+    return path;
+  }
+
+  Params params;
+  State state;
+};
+
+class WavePanel::RenderThread : public juce::Thread,
+                                public juce::ChangeBroadcaster,
+                                public GrainVoice::Listener {
+public:
+  RenderThread(GrainSynth &synth)
+      : Thread("wave-image"), synth(synth),
+        collector(std::make_unique<ImageBuilder::State>()) {}
+  ~RenderThread() override {}
+
   void grainVoicePlaying(const GrainVoice &, const GrainSound &sound,
                          GrainWaveform &wave, const GrainSequence::Point &seq,
-                         int sampleNum, int sampleCount) override {
-    auto maxWidth = sound.params.common.maxGrainWidthSamples(*sound.index);
-    std::lock_guard<std::mutex> guard(collectorMutex);
-    maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
-    if (collector) {
-      collector->playing(wave, seq, sampleNum, sampleCount);
+                         const juce::Range<int> &samples) override {
+    if (samples.getLength() > 0) {
+      std::lock_guard<std::mutex> guard(collectorMutex);
+      collector->ensureWidth(
+          sound.params.common.maxGrainWidthSamples(*sound.index));
+      collector->addPlayback(wave, {seq, samples});
     }
   }
 
-  void visualizeSoundSettings(const GrainSound &sound) {
-    auto maxWidth = sound.params.common.maxGrainWidthSamples(*sound.index);
-    std::lock_guard<std::mutex> guard(collectorMutex);
-    maxWidthForNextCollector = std::max(maxWidthForNextCollector, maxWidth);
-    if (collector) {
-      collector->windows.push_back(sound.params.common.window(*sound.index));
-    }
-  }
-
-  void requestChange(const Request &req) {
+  void requestChange(const ImageBuilder::Params &req) {
     std::lock_guard<std::mutex> guard(requestMutex);
     request = req;
   }
@@ -60,280 +174,57 @@ public:
   }
 
 private:
-  class CoverageFilter {
-    // FIXME:
-    // - make the coverage map width == number of samples not number of columns,
-    //   and resample once per frame.
-    // - do store coverage per-waveform, persistently.
-    // - the whole CoverageFilter/Collector split doesn't make sense, even more
-    //   so with per-wave coverage tracking?
-    // - Actually maybe temporal filtering goes as late as possible? it would
-    //   be useful to filter vertical scale changes. actually, horizontal too.
-    //   can we just filter the whole wave image?
-    //
-    // Ok, new plan: if we are definitely collecting coverage per-wave and
-    // per-sample rather than per-frame and per-column, it'll be fastest and
-    // simplest to keep a flat std::vector of voice playback events, and sort it
-    // all out on the render thread. There we could just draw a rectangle list
-    // onto an image that gets temporally filtered. The Y axis should be Wave,
-    // sorted by grain#, so it's like a regular playback head when monophonic
-    // but when many grains are happening it's more like a piano roll of
-    // waveforms multiplied with playback coverage*gain.
-    //
-  public:
-    static constexpr int height = 5;
-    static constexpr int border = 1;
-    static constexpr float persistence = 0.75f;
-    static constexpr float gainAdjustmentRate = 1e-2;
-
-    CoverageFilter() {}
-
-    void add(const std::vector<float> &coverage) {
-      if (coverage.size() != accumulator.size()) {
-        accumulator.clear();
-        accumulator.resize(coverage.size());
-      }
-      for (int i = 0; i < accumulator.size(); i++) {
-        accumulator[i] += coverage[i];
-      }
-    }
-
-    juce::Image &renderImage() {
-      if (image.isNull() || image.getWidth() != accumulator.size()) {
-        image = juce::Image(juce::Image::SingleChannel,
-                            std::max<int>(1, accumulator.size()), height, true);
-      }
-      juce::Image::BitmapData bits(image, juce::Image::BitmapData::writeOnly);
-
-      float peak = 0.f;
-      for (auto value : accumulator) {
-        peak = std::max(peak, value);
-      }
-      float targetGain = std::min(1e6f, peak > 0.f ? 255.f / peak : 0.f);
-      gain += (targetGain - gain) * gainAdjustmentRate;
-      for (int x = 0; x < accumulator.size(); x++) {
-        juce::uint8 alpha =
-            juce::jlimit<int>(0, 255, std::round(accumulator[x] * gain));
-        for (int y = border; y < height - border; y++) {
-          bits.setPixelColour(x, y, juce::Colour().withAlpha(alpha));
-        }
-      }
-      for (auto &value : accumulator) {
-        value *= persistence;
-      }
-      return image;
-    }
-
-  private:
-    std::vector<float> accumulator;
-    float gain{0.};
-    juce::Image image;
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CoverageFilter)
-  };
-
-  class Collector {
-  public:
-    struct WaveInfo {
-      GrainWaveform::Ptr wave;
-      std::vector<float> coverage;
-
-      void addCoverage(float start, float end, float amount) {
-        int startFloor = std::floor(start), startCeil = std::ceil(start);
-        int endFloor = std::floor(end), endCeil = std::ceil(end);
-        if (startFloor != startCeil && startFloor >= 0 &&
-            startFloor < coverage.size()) {
-          coverage[startFloor] += amount * (startCeil - start);
-        }
-        for (int x = std::max<int>(0, startCeil);
-             x < std::min<int>(coverage.size(), endFloor); x++) {
-          coverage[x] += amount;
-        }
-        if (endFloor != endCeil && endFloor >= 0 &&
-            endFloor < coverage.size()) {
-          coverage[endFloor] += amount * (end - endFloor);
-        }
-      }
-    };
-
-    std::vector<GrainWaveform::Window> windows;
-    std::unordered_map<GrainWaveform *, WaveInfo> waves;
-    int numColumns, samplesPerTimeStep;
-    float samplesPerColumn;
-
-    Collector(int numColumns, float maxGrainWidthSamples)
-        : numColumns(numColumns),
-          samplesPerColumn(2.f * maxGrainWidthSamples / numColumns) {}
-
-    int centerColumn() const { return numColumns / 2; }
-
-    void drawCenterColumn(juce::Graphics &g, int height) {
-      auto thick = 2.5f;
-      auto margin = 1.f;
-      auto x = centerColumn();
-      g.drawLine(x, margin + thick, x, height - thick - margin, thick);
-      g.fillEllipse(x - thick, margin, thick * 2, thick * 2);
-      g.fillEllipse(x - thick, height - margin - thick * 2, thick * 2,
-                    thick * 2);
-    }
-
-    void playing(GrainWaveform &wave, const GrainSequence::Point &seq,
-                 int sampleNum, int sampleCount) {
-      if (sampleCount < 1) {
-        // This is a stand-in for a grain that couldn't be loaded in time
-        return;
-      }
-      // Track the playing audio per-waveform
-      auto &waveInfo = waves[&wave];
-      if (waveInfo.wave == nullptr) {
-        waveInfo.wave = &wave;
-        waveInfo.coverage.resize(numColumns);
-      }
-      jassert(waveInfo.wave == &wave);
-      jassert(waveInfo.coverage.size() == numColumns);
-
-      auto sampleStart = wave.key.window.range().getStart() + sampleNum;
-      auto sampleEnd = sampleStart + sampleCount;
-      waveInfo.addCoverage(
-          std::max<float>(0, centerColumn() + sampleStart / samplesPerColumn),
-          std::min<float>(numColumns,
-                          centerColumn() + sampleEnd / samplesPerColumn),
-          1.f /* fixme */);
-    }
-
-    juce::Path pathForWindow(const GrainWaveform::Window &window,
-                             float height) const {
-      const float top = height * 0.1f;
-      const float bottom = height * 0.9f;
-      auto peak = window.peakValue();
-      juce::Path path;
-      for (int col = 0; col < numColumns; col++) {
-        auto x = (col - centerColumn()) * samplesPerColumn;
-        auto normalized = window.evaluate(x) / peak;
-        auto y = bottom + normalized * (top - bottom);
-        if (col == 0) {
-          path.startNewSubPath(col, y);
-        } else {
-          path.lineTo(col, y);
-        }
-      }
-      return path;
-    }
-
-    std::vector<GrainWaveform::Window> collectUniqueWaveformWindows() const {
-      std::vector<GrainWaveform::Window> result;
-      for (auto &item : waves) {
-        auto w = item.second.wave->key.window;
-        if (std::find(windows.begin(), windows.end(), w) == windows.end() &&
-            std::find(result.begin(), result.end(), w) == result.end()) {
-          result.push_back(w);
-        }
-      }
-      return result;
-    }
-
-    std::unique_ptr<juce::Image> renderImage(const Request &req,
-                                             CoverageFilter &coverage) {
-      auto height = req.bounds.getHeight();
-      if (height < 1) {
-        return nullptr;
-      }
-      auto image = std::make_unique<juce::Image>(juce::Image::RGB, numColumns,
-                                                 height, false);
-
-      juce::Graphics g(*image);
-      g.fillAll(req.background);
-      g.setColour(req.background.contrasting(1.f));
-
-      // Coverage (antialiased playback positions) for active waveforms
-      for (auto &item : waves) {
-        coverage.add(item.second.coverage);
-      }
-      g.setOpacity(0.7f);
-      g.drawImage(coverage.renderImage(), 0, 0, numColumns, height, 0, 0,
-                  numColumns, coverage.height, true);
-
-      // Faint outline of all active window functions
-      for (auto window : collectUniqueWaveformWindows()) {
-        g.setOpacity(0.2f);
-        g.strokePath(pathForWindow(window, height), juce::PathStrokeType(2.f));
-      }
-
-      // Highlighted window functions
-      g.setColour(req.highlight);
-      for (auto &window : windows) {
-        g.setOpacity(0.4f);
-        g.strokePath(pathForWindow(window, height), juce::PathStrokeType(3.5f));
-      }
-
-      // Hilighted center column
-      g.setColour(req.highlight);
-      drawCenterColumn(g, height);
-
-      return image;
-    }
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Collector)
-  };
-
   GrainSynth &synth;
-  CoverageFilter coverage;
 
   std::mutex requestMutex;
-  Request request;
+  ImageBuilder::Params request;
 
   std::mutex imageMutex;
   std::unique_ptr<juce::Image> image;
 
   std::mutex collectorMutex;
-  std::unique_ptr<Collector> collector;
-  float maxWidthForNextCollector{0.f};
+  std::unique_ptr<ImageBuilder::State> collector;
 
-  Request latestRequest() {
+  std::unique_ptr<ImageBuilder::State> takeCollector() {
+    auto result = std::make_unique<ImageBuilder::State>();
+    std::lock_guard<std::mutex> guard(collectorMutex);
+    std::swap(result, collector);
+    return result;
+  }
+
+  ImageBuilder::Params latestRequest() {
     std::lock_guard<std::mutex> guard(requestMutex);
     return request;
   }
 
   std::unique_ptr<juce::Image> renderImage() {
-    auto req = latestRequest();
-    auto width = req.bounds.getWidth();
-    if (width < 1) {
-      return nullptr;
-    }
+    auto state = takeCollector();
     auto latestSound = synth.latestSound();
-    if (latestSound == nullptr) {
-      return nullptr;
+    if (latestSound != nullptr) {
+      state->addSoundWindow(*latestSound);
     }
-    visualizeSoundSettings(*latestSound);
-    std::unique_ptr<Collector> cptr;
-    {
-      std::lock_guard<std::mutex> guard(collectorMutex);
-      cptr = std::make_unique<Collector>(width, maxWidthForNextCollector);
-      maxWidthForNextCollector = 0.f;
-      std::swap(collector, cptr);
-    }
-    return cptr == nullptr ? nullptr : cptr->renderImage(req, coverage);
+    return ImageBuilder(latestRequest(), *state).run();
   }
 
-  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ImageRender)
+  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RenderThread)
 };
 
 WavePanel::WavePanel(RvvProcessor &p)
-    : processor(p), image(std::make_unique<ImageRender>(processor.synth)) {
-  processor.synth.addListener(image.get());
-  image->startThread();
-  image->addChangeListener(this);
+    : processor(p), thread(std::make_unique<RenderThread>(processor.synth)) {
+  processor.synth.addListener(thread.get());
+  thread->startThread();
+  thread->addChangeListener(this);
 }
 
 WavePanel::~WavePanel() {
-  processor.synth.removeListener(image.get());
-  image->signalThreadShouldExit();
-  image->notify();
-  image->waitForThreadToExit(-1);
+  processor.synth.removeListener(thread.get());
+  thread->signalThreadShouldExit();
+  thread->notify();
+  thread->waitForThreadToExit(-1);
 }
 
 void WavePanel::resized() {
-  image->requestChange(ImageRender::Request{
+  thread->requestChange(ImageBuilder::Params{
       .bounds = getLocalBounds(),
       .background = findColour(juce::ResizableWindow::backgroundColourId),
       .highlight = findColour(juce::Slider::thumbColourId),
@@ -342,7 +233,7 @@ void WavePanel::resized() {
 
 void WavePanel::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds().toFloat();
-  image->drawLatest(g, bounds);
+  thread->drawLatest(g, bounds);
 }
 
 void WavePanel::changeListenerCallback(juce::ChangeBroadcaster *) {

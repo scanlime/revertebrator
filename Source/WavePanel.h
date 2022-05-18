@@ -12,10 +12,11 @@ public:
   void resized() override;
 
 private:
-  class ImageRender;
+  class RenderThread;
+  class ImageBuilder;
 
   RvvProcessor &processor;
-  std::unique_ptr<ImageRender> image;
+  std::unique_ptr<RenderThread> thread;
 
   void changeListenerCallback(juce::ChangeBroadcaster *) override;
 

@@ -111,8 +111,8 @@ public:
   public:
     virtual void grainVoicePlaying(const GrainVoice &, const GrainSound &,
                                    GrainWaveform &,
-                                   const GrainSequence::Point &, int sampleNum,
-                                   int sampleCount) = 0;
+                                   const GrainSequence::Point &,
+                                   const juce::Range<int> &samples) = 0;
   };
 
   void addListener(Listener *);

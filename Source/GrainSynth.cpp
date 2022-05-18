@@ -457,10 +457,11 @@ void GrainVoice::renderFromQueue(const GrainSound &sound,
 
     {
       std::lock_guard<std::mutex> guard(listenerMutex);
-      listeners.call([this, &sound, &wave, seq = grain.seq, relative,
-                      copySize](Listener &l) {
-        l.grainVoicePlaying(*this, sound, wave, seq, -relative, copySize);
-      });
+      auto range = juce::Range<int>::withStartAndLength(-relative, copySize);
+      listeners.call(
+          [this, &sound, &wave, seq = grain.seq, range](Listener &l) {
+            l.grainVoicePlaying(*this, sound, wave, seq, range);
+          });
     }
 
     if (copySize > 0) {
