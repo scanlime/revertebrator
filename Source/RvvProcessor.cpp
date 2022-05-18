@@ -18,7 +18,7 @@ RvvProcessor::RvvProcessor()
                     juce::NormalisableRange<float>(-1.0f, 1.0f), 0.f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_mix", "Mix AB",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.f),
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "grain_rate", "Grain Rate",
                     juce::NormalisableRange<float>(0.0f, 1000.0f), 10.f),
