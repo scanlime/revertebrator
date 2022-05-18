@@ -12,19 +12,19 @@ RvvProcessor::RvvProcessor()
                     juce::NormalisableRange<float>(0.01f, 1.0f), 0.1f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_width1", "Win B",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.4f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_phase1", "Phase B",
-                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.f),
+                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.9f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_mix", "Mix AB",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "grain_rate", "Grain Rate",
                     juce::NormalisableRange<float>(0.0f, 200.0f), 10.f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "grain_rate_spread", "Rate Spread",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.f),
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.5f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "speed_warp", "Speed",
                     juce::NormalisableRange<float>(0.1f, 2.0f), 1.f),
@@ -36,13 +36,13 @@ RvvProcessor::RvvProcessor()
                     juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "sel_spread", "Sel Spread",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 1.0f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "stereo_center", "Stereo Center",
                     juce::NormalisableRange<float>(-1.0f, 1.0f), 0.0f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "stereo_spread", "Stereo Spread",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.0f),
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.3f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "pitch_spread", "Pitch Spread",
                     juce::NormalisableRange<float>(0.0f, 8.0f), 0.0f),
