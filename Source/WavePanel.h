@@ -1,6 +1,5 @@
 #pragma once
 
-#include "GrainSynth.h"
 #include "RvvProcessor.h"
 #include <JuceHeader.h>
 
