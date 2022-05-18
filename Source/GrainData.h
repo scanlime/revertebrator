@@ -37,7 +37,10 @@ public:
     }
 
     inline float peakValue() const noexcept {
-      return std::max(evaluate(0), evaluate(phase1));
+      auto y0 = evaluate(0);
+      auto y1 = evaluate(phase1 / 2);
+      auto y2 = evaluate(phase1);
+      return std::max(y0, std::max(y1, y2));
     }
 
     inline bool operator==(const Window &o) const noexcept {
