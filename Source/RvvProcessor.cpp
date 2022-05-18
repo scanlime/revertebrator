@@ -166,15 +166,14 @@ void RvvProcessor::updateSoundFromState() {
         .gainDbLow = state.getParameterAsValue("gain_db_low").getValue(),
         .gainDbHigh = state.getParameterAsValue("gain_db_high").getValue(),
     };
-    auto params = MidiGrainSequence::MidiParams{
+    auto midiParams = MidiGrainSequence::MidiParams{
         .common = commonParams,
         .selCenter = state.getParameterAsValue("sel_center").getValue(),
         .selMod = state.getParameterAsValue("sel_mod").getValue(),
         .pitchBendRange =
             state.getParameterAsValue("pitch_bend_range").getValue(),
-
     };
-    synth.changeSound(*index, params);
+    synth.changeSound(*index, midiParams);
   }
 }
 
