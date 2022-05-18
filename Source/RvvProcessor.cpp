@@ -9,16 +9,16 @@ RvvProcessor::RvvProcessor()
             {
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_width0", "Win A",
-                    juce::NormalisableRange<float>(0.01f, 1.0f), 0.1f),
+                    juce::NormalisableRange<float>(0.01f, 1.0f), 0.5f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_width1", "Win B",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.4f),
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_phase1", "Phase B",
-                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.9f),
+                    juce::NormalisableRange<float>(-1.0f, 1.0f), 0.f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "win_mix", "Mix AB",
-                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.1f),
+                    juce::NormalisableRange<float>(0.0f, 1.0f), 0.f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "grain_rate", "Grain Rate",
                     juce::NormalisableRange<float>(0.0f, 1000.0f), 10.f),
