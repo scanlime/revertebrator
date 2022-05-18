@@ -5,8 +5,10 @@
 
 class GrainData::CacheCleanupJob : private juce::ThreadPoolJob,
                                    private juce::Timer {
-  static constexpr int intervalMilliseconds = 1500;
-  static constexpr int inactivityThreshold = 5;
+  static constexpr int intervalMilliseconds = 750;
+  static constexpr int inactivitySeconds = 10;
+  static constexpr int inactivityThreshold =
+      inactivitySeconds / (1000 / intervalMilliseconds);
 
 public:
   CacheCleanupJob(juce::ThreadPool &pool, GrainData &grainData)

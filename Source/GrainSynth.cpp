@@ -53,13 +53,15 @@ int GrainSequence::Params::samplesUntilNextPoint(Rng &rng) const {
 }
 
 float GrainSequence::Params::selNoise(Rng &rng, float input) const {
-  std::uniform_real_distribution<> uniform(-1.f, 1.f);
+  std::uniform_real_distribution<> uniform(-0.5f, 0.5f);
   return input + selSpread * uniform(rng);
 }
 
 float GrainSequence::Params::pitchNoise(Rng &rng, float input) const {
-  std::uniform_real_distribution<> uniform(-1.f, 1.f);
-  return input * (1.f + pitchSpread * uniform(rng));
+  std::uniform_real_distribution<> uniform(-0.5f, 0.5f);
+  float transposeBySemitones = pitchSpread * uniform(rng);
+  float pitchRatio = std::pow(2.f, transposeBySemitones / 12.f);
+  return input * pitchRatio;
 }
 
 TouchGrainSequence::TouchGrainSequence(GrainIndex &index, const Params &params,

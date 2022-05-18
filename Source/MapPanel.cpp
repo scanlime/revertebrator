@@ -422,11 +422,12 @@ void MapPanel::requestNewImage(GrainIndex &index) {
 void MapPanel::updateGrainUnderMouse(const juce::MouseEvent &e, bool isDown) {
   float pitch = 0.f, sel = 0.f, velocity = 0.f;
   auto index = processor.grainData.getIndex();
-  if (isDown && index != nullptr && index->isValid()) {
+  auto sound = processor.synth.latestSound();
+  if (isDown && index != nullptr && index->isValid() && sound != nullptr) {
     Layout layout(getLocalBounds().toFloat(), *index);
     auto point = layout.pointInfo(e.getEventRelativeTo(this).position);
     if (point.valid) {
-      pitch = point.pitch;
+      pitch = point.pitch * sound->params.common.speedWarp;
       sel = point.sel;
       velocity = 0.7f;
     }
