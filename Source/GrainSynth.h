@@ -26,9 +26,8 @@ public:
     float speedRatio(const GrainIndex &) const;
     float maxGrainWidthSamples(const GrainIndex &) const;
     GrainWaveform::Window window(const GrainIndex &) const;
-    unsigned chooseGrain(const GrainIndex &, float pitch, float sel);
-    unsigned chooseGrainWithNoise(const GrainIndex &, Rng &, float pitch,
-                                  float sel);
+    unsigned grain(const GrainIndex &, float pitch, float sel);
+    unsigned grain(const GrainIndex &, Rng &, float pitch, float sel);
     Gains velocityToGains(Rng &, float) const;
     int samplesUntilNextPoint(Rng &) const;
     float selNoise(Rng &, float) const;

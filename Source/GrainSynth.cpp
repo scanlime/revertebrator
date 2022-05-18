@@ -16,18 +16,17 @@ GrainSequence::Params::window(const GrainIndex &index) const {
   return GrainWaveform::Window(maxGrainWidthSamples(index), windowParams);
 }
 
-unsigned GrainSequence::Params::chooseGrain(const GrainIndex &index,
-                                            float pitch, float sel) {
+unsigned GrainSequence::Params::grain(const GrainIndex &index, float pitch,
+                                      float sel) {
   auto bin = index.closestBinForPitch(pitch / speedWarp);
   auto gr = index.grainsForBin(bin);
   auto sel01 = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
   return gr.clipValue(gr.getStart() + gr.getLength() * sel01);
 }
 
-unsigned GrainSequence::Params::chooseGrainWithNoise(const GrainIndex &index,
-                                                     Rng &rng, float pitch,
-                                                     float sel) {
-  return chooseGrain(index, pitchNoise(rng, pitch), selNoise(rng, sel));
+unsigned GrainSequence::Params::grain(const GrainIndex &index, Rng &rng,
+                                      float pitch, float sel) {
+  return grain(index, pitchNoise(rng, pitch), selNoise(rng, sel));
 }
 
 GrainSequence::Gains
@@ -74,8 +73,7 @@ GrainSequence::Point TouchGrainSequence::generate(Rng &rng) {
   return Point{
       .waveKey =
           {
-              .grain = params.chooseGrainWithNoise(index, rng, event.pitch,
-                                                   event.sel),
+              .grain = params.grain(index, rng, event.pitch, event.sel),
               .speedRatio = params.speedRatio(index),
               .window = params.window(index),
           },
@@ -99,8 +97,7 @@ GrainSequence::Point MidiGrainSequence::generate(Rng &rng) {
   return Point{
       .waveKey =
           {
-              .grain =
-                  params.common.chooseGrainWithNoise(index, rng, pitch, sel),
+              .grain = params.common.grain(index, rng, pitch, sel),
               .speedRatio = params.common.speedRatio(index),
               .window = params.common.window(index),
           },
