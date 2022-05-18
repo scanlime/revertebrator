@@ -19,15 +19,15 @@ GrainSequence::Params::window(const GrainIndex &index) const {
 unsigned GrainSequence::Params::chooseGrain(const GrainIndex &index,
                                             float pitch, float sel) {
   auto bin = index.closestBinForPitch(pitch / speedWarp);
-  auto grains = index.grainsForBin(bin);
+  auto gr = index.grainsForBin(bin);
   auto sel01 = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
-  return std::round(grains.getStart() + sel01 * (grains.getLength() - 1));
+  return gr.clipValue(gr.getStart() + gr.getLength() * sel01);
 }
 
 unsigned GrainSequence::Params::chooseGrainWithNoise(const GrainIndex &index,
                                                      Rng &rng, float pitch,
                                                      float sel) {
-  return chooseGrain(index, pitchNoise(rng, pitch), selNoise(rng, pitch));
+  return chooseGrain(index, pitchNoise(rng, pitch), selNoise(rng, sel));
 }
 
 GrainSequence::Gains
