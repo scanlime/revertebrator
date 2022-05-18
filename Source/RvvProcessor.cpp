@@ -50,10 +50,10 @@ RvvProcessor::RvvProcessor()
                     "pitch_bend_range", "Pitch Bend",
                     juce::NormalisableRange<float>(1.0f, 64.0f), 12.0f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "gain_db_low", "Volume Lo",
+                    "gain_db_low", "Volume Low",
                     juce::NormalisableRange<float>(-100.0f, 0.0f), -70.0f),
                 std::make_unique<juce::AudioParameterFloat>(
-                    "gain_db_high", "Volume Hi",
+                    "gain_db_high", "Volume High",
                     juce::NormalisableRange<float>(-100.0f, 0.0f), -30.0f),
             }),
       grainData(generalPurposeThreads), synth(grainData, 512) {
