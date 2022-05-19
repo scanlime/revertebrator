@@ -299,9 +299,8 @@ private:
                            juce::Colour outline = {}) {
     juce::RectangleList<float> rects;
     rects.ensureStorageAllocated(grains.size());
-    // xxx todo: data type to keep a grain set with a cached rectangle list for a particular layout.
     for (auto grain : grains) {
-      rects.add(layout.expandedGrainRectangle(grain));
+      rects.addWithoutMerging(layout.expandedGrainRectangle(grain));
     }
     if (!outline.isTransparent()) {
       g.setColour(outline);
