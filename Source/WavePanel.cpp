@@ -56,9 +56,17 @@ public:
     // Each sorted active grain gets a row in the backing image
     auto waves = collectWavesSortedByGrain();
     if (waves.size() > 0) {
+      auto peakCoverage = 0.f;
+      std::vector<CoverageMap> maps;
       for (int i = 0; i < waves.size(); i++) {
-        drawWaveRow(*image, *waves[i], i * height() / waves.size(),
-                    (i + 1) * height() / waves.size());
+        maps.push_back({});
+        coverageForWavePlayback(*waves[i], maps.back());
+        peakCoverage = std::max(peakCoverage, maps.back().peakValue());
+      }
+      for (int i = 0; i < waves.size(); i++) {
+        int top = i * height() / waves.size();
+        int bottom = (i + 1) * height() / waves.size();
+        drawCoverageMap(*image, maps[i], 1.f / peakCoverage, top, bottom);
       }
     } else {
       juce::Graphics g(*image);
@@ -89,39 +97,48 @@ public:
   }
 
 private:
+  struct CoverageMap {
+    std::vector<float> bins;
+
+    void add(float start, float end, float amount) {
+      int startFloor = std::floor(start), startCeil = std::ceil(start);
+      int endFloor = std::floor(end), endCeil = std::ceil(end);
+      if (startFloor != startCeil && startFloor >= 0 &&
+          startFloor < bins.size()) {
+        bins[startFloor] += amount * (startCeil - start);
+      }
+      for (int x = std::max<int>(0, startCeil);
+           x < std::min<int>(bins.size(), endFloor); x++) {
+        bins[x] += amount;
+      }
+      if (endFloor != endCeil && endFloor >= 0 && endFloor < bins.size()) {
+        bins[endFloor] += amount * (end - endFloor);
+      }
+    }
+
+    inline float peakValue() const noexcept {
+      float result = 0.f;
+      for (auto value : bins) {
+        result = std::max(result, value);
+      }
+      return result;
+    }
+  };
+
   int width() const { return params.bounds.getWidth(); }
   int height() const { return params.bounds.getHeight(); }
   int centerColumn() const { return width() / 2; }
   float samplesPerColumn() const { return 2 * state.widthInSamples / width(); }
 
-  void drawWaveRow(juce::Image &image, const WaveInfo &waveInfo, int top,
-                   int bottom) {
-    const auto &wave = *waveInfo.wave;
-
-// xx automatic gain control where
-
-    // Make a big gain coverage map for this waveform, with sample resolution
-    std::vector<float> coverage(wave.getNumSamples());
-    for (const auto &playback : wave.playing) {
-      const auto &gains = playback.seq.gains;
-      auto totalGain = std::accumulate(gains.begin(), gains.end(), 0.f);
-      auto begin = std::max(0, playback.samples.getBegin());
-      auto end = std::min(coverage.size()-1, playback.samples.getEnd());
-      for (auto x = begin; x < end; x++) {
-        coverage[x] += totalGain;
-      }
-    }
-
-    // Downsample to the image's width
-
-}
-
-    std;
-
+  void drawCoverageMap(juce::Image &image, const CoverageMap &map, float gain,
+                       int top, int bottom) {
+    jassert(map.bins.size() == width());
     juce::Image::BitmapData bits(image, juce::Image::BitmapData::writeOnly);
-    for (int x = 0; x < width(); x++) {
+    for (int x = 0; x < map.bins.size(); x++) {
       for (int y = top; y < bottom; y++) {
-        auto c = params.background.contrasting(0.5f);
+        float t = (y - top) * M_PI / (bottom - top);
+        auto c = params.background.contrasting(
+            juce::jlimit(0.f, 1.f, sinf(t) * gain * map.bins[x]));
         bits.setPixelColour(x, y, c);
       }
     }
@@ -158,6 +175,22 @@ private:
                 return a->wave->key.grain > b->wave->key.grain;
               });
     return result;
+  }
+
+  void coverageForWavePlayback(const WaveInfo &waveInfo, CoverageMap &map) {
+    const auto &wave = *waveInfo.wave;
+    map.bins.resize(width());
+    for (const auto &playback : waveInfo.playing) {
+      const auto &gains = playback.seq.gains;
+      auto totalGain = std::accumulate(gains.begin(), gains.end(), 0.f);
+      auto samples = playback.samples + wave.key.window.range().getStart();
+      auto columnStart = std::max<float>(
+          0.f, centerColumn() + samples.getStart() / samplesPerColumn());
+      auto columnEnd = std::min<float>(map.bins.size() - 1,
+                                       centerColumn() + samples.getEnd() /
+                                                            samplesPerColumn());
+      map.add(columnStart, columnEnd, totalGain);
+    }
   }
 
   juce::Path pathForWindow(const GrainWaveform::Window &window) const {
