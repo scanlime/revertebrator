@@ -91,6 +91,10 @@ public:
         xCoordRightOfBin(bin), yCoordForGrain(grains, grain));
   }
 
+  inline juce::Rectangle<float> expandedGrainRectangle(unsigned grain) const {
+    return grainRectangle(grain).expanded(2.5f);
+  }
+
 private:
   juce::Rectangle<float> bounds;
   const GrainIndex &index;
@@ -294,8 +298,10 @@ private:
                            juce::SortedSet<unsigned> &grains, juce::Colour fill,
                            juce::Colour outline = {}) {
     juce::RectangleList<float> rects;
+    rects.ensureStorageAllocated(grains.size());
+    // xxx todo: data type to keep a grain set with a cached rectangle list for a particular layout.
     for (auto grain : grains) {
-      rects.add(layout.grainRectangle(grain).expanded(2.5f));
+      rects.add(layout.expandedGrainRectangle(grain));
     }
     if (!outline.isTransparent()) {
       g.setColour(outline);
