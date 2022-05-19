@@ -56,17 +56,20 @@ public:
     // Each sorted active grain gets a row in the backing image
     auto waves = collectWavesSortedByGrain();
     if (waves.size() > 0) {
-      auto peakCoverage = 0.f;
-      std::vector<CoverageMap> maps;
+      std::vector<CoverageMap> maps(std::min<int>(waves.size(), height()));
       for (int i = 0; i < waves.size(); i++) {
-        maps.push_back({});
-        coverageForWavePlayback(*waves[i], maps.back());
-        peakCoverage = std::max(peakCoverage, maps.back().peakValue());
+        auto &map = maps[std::min<int>(maps.size() - 1,
+                                       i * maps.size() / waves.size())];
+        coverageForWavePlayback(*waves[i], map);
       }
-      for (int i = 0; i < waves.size(); i++) {
+      auto peakCoverage = 0.f;
+      for (const auto &map : maps) {
+        peakCoverage = std::max(peakCoverage, map.peakValue());
+      }
+      for (int i = 0; i < maps.size(); i++) {
         int top = i * height() / waves.size();
         int bottom = (i + 1) * height() / waves.size();
-        drawCoverageMap(*image, maps[i], 1.f / peakCoverage, top, bottom);
+        drawCoverageMap(*image, maps[i], 2.f / peakCoverage, top, bottom);
       }
     } else {
       juce::Graphics g(*image);
