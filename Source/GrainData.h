@@ -111,6 +111,7 @@ public:
 
   juce::int64 sizeInBytes();
   void cleanup(int inactivityThreshold);
+  void expire(const std::vector<GrainWaveform::Key> &);
 
   void store(GrainWaveform &);
   GrainWaveform::Ptr lookupOrInsertEmpty(const GrainWaveform::Key &);

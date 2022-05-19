@@ -133,11 +133,33 @@ public:
   }
 
   void addJob(const Job &j) {
+    static constexpr int maxJobBacklog = 20;
+    struct Expiration {
+      GrainIndex::Ptr index;
+      std::vector<GrainWaveform::Key> keysToRemove;
+    };
+    std::unordered_map<GrainIndex *, Expiration> expirationsByIndex;
     {
       // The work queue is actually set up as LIFO so we
       // prioritize new jobs even if there is a backlog.
+      // Jobs to expire are saved for processing without this lock held.
       std::lock_guard<std::mutex> guard(workMutex);
       workQueue.push_front(j);
+      while (workQueue.size() > maxJobBacklog) {
+        const auto &job = workQueue.back();
+        auto &expiration = expirationsByIndex[job.index.get()];
+        if (expiration.index == nullptr) {
+          expiration.index = job.index;
+        }
+        jassert(expiration.index.get() == job.index.get());
+        expiration.keysToRemove.push_back(job.key);
+        workQueue.pop_back();
+      }
+    }
+    // Expire excessively backlogged loading jobs in batches by index
+    for (auto &item : expirationsByIndex) {
+      auto &expiration = item.second;
+      expiration.index->cache.expire(expiration.keysToRemove);
     }
     notify();
   }
@@ -408,14 +430,21 @@ void GrainWaveformCache::cleanup(int inactivityThreshold) {
         }
       }
     }
-    for (auto &key : keysToRemove) {
+    totalBytes -= sizeOfWavesToRelease;
+  }
+  expire(keysToRemove);
+}
+
+void GrainWaveformCache::expire(const std::vector<GrainWaveform::Key> &keys) {
+  {
+    std::lock_guard<std::mutex> guard(cacheMutex);
+    for (auto &key : keys) {
       map.erase(key);
     }
-    totalBytes -= sizeOfWavesToRelease;
   }
   {
     std::lock_guard<std::mutex> guard(listenerMutex);
-    for (auto &key : keysToRemove) {
+    for (auto &key : keys) {
       listeners.call([key](Listener &l) { l.grainWaveformExpired(key); });
     }
   }
@@ -441,7 +470,6 @@ void GrainWaveformCache::store(GrainWaveform &wave) {
     listeners.call([key](Listener &l) { l.grainWaveformStored(key); });
   }
 }
-
 GrainWaveform::Ptr
 GrainWaveformCache::lookupOrInsertEmpty(const GrainWaveform::Key &key) {
   GrainWaveform::Ptr result;
