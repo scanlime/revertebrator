@@ -69,7 +69,7 @@ public:
       for (int i = 0; i < maps.size(); i++) {
         int top = i * height() / waves.size();
         int bottom = (i + 1) * height() / waves.size();
-        drawCoverageMap(*image, maps[i], 2.f / peakCoverage, top, bottom);
+        drawCoverageMap(*image, maps[i], 1.f / peakCoverage, top, bottom);
       }
     } else {
       juce::Graphics g(*image);
