@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 
-import tqdm
+import audioread
 import argparse
 import json
-import queue
-import audioread
 import librosa
 import multiprocessing
 import multiprocessing.managers
 import numpy as np
 import os
-import random
+import queue
 import soundfile
+import sqlite3
 import tempfile
 import time
-import sqlite3
-import warnings
+import tqdm
 import zipfile
 
 
@@ -29,6 +27,39 @@ class Database:
             default=databaseFile,
             help=f"name of database file to use [{databaseFile}]",
         )
+
+    def queryArguments(parser):
+        parser.add_argument(
+            "-r",
+            metavar="HZ",
+            dest="queryRate",
+            help=f"select files of a specified sample rate only",
+        )
+        parser.add_argument(
+            "-p",
+            metavar="GLOB",
+            dest="queryPath",
+            help=f"select file paths that match a glob pattern",
+        )
+
+    def iterFiles(self, args):
+        sql = """
+            select id, path, samplerate, duration,
+                (select count(pitch_features.time)
+                from pitch_features where files.id == pitch_features.file)
+                    as numPitchFeatures
+            from files where 1
+        """
+        params = []
+        if args.queryRate is not None:
+            sql += " and files.samplerate = ?"
+            params.append(args.queryRate)
+        if args.queryPath is not None:
+            sql += " and files.path glob ?"
+            params.append(args.queryPath)
+        cur = self.con.cursor()
+        for row in cur.execute(sql, params):
+            yield dict(zip((d[0] for d in cur.description), row))
 
     def __init__(self, args):
         self.con = sqlite3.connect(args.databaseFile)
@@ -260,13 +291,99 @@ class FileScanner:
         self.pendingFiles.append((path, audio, blocks))
 
 
-# def find_common_sample_rate(inputs):
-#     rates = [npz["sr"] for npz in inputs]
-#     if max(rates) != min(rates):
-#         raise ValueError(f"Inputs have inconsistent sample rates: {rates}")
-#     return int(rates[0])
-#
-#
+class FileListing:
+    def arguments(parser):
+        Database.queryArguments(parser)
+        parser.set_defaults(factory=FileListing)
+
+    def __init__(self, args):
+        self.db = Database(args)
+        self.args = args
+
+    def run(self):
+        for row in self.db.iterFiles(self.args):
+            print(
+                f"{row['path']}\t"
+                f"{row['samplerate']} Hz\t"
+                f"{row['duration']} seconds\t"
+                f"{row['numPitchFeatures']} pitch features"
+            )
+
+
+class FilePacker:
+    def arguments(parser):
+        default_res = 0.01
+        default_min = 3
+        default_width = 3.0
+        default_mark = 8
+        Database.queryArguments(parser)
+        parser.set_defaults(factory=FilePacker)
+        parser.add_argument(
+            "-o",
+            metavar="DEST",
+            dest="output",
+            help="name of packed output file [voice-###.rvv]",
+        )
+        parser.add_argument(
+            "-w",
+            metavar="S",
+            dest="width",
+            type=float,
+            default=default_width,
+            help=f"maximum grain width in seconds [{default_width}]",
+        )
+        parser.add_argument(
+            "-n",
+            metavar="N",
+            dest="max",
+            type=int,
+            help="maximum number of grains per bin [no limit]",
+        )
+        parser.add_argument(
+            "--res",
+            dest="res",
+            metavar="ST",
+            type=float,
+            default=default_res,
+            help=f"pitch binning resolution in semitones [{default_res}]",
+        )
+        parser.add_argument(
+            "--min",
+            dest="min",
+            metavar="N",
+            type=int,
+            default=default_min,
+            help=f"discard bins with fewer than this minimum number of grains [{default_min}]",
+        )
+        parser.add_argument(
+            "--mark",
+            dest="mark",
+            metavar="N",
+            type=int,
+            default=default_mark,
+            help=f"mark discontinuities with an N sample long noise [{default_mark}]",
+        )
+
+    def __init__(self, args):
+        self.db = Database(args)
+        self.files = list(self.db.iterFiles(args))
+        self.sampleRate = self._findCommonSampleRate()
+        self.args = args
+
+    def _findCommonSampleRate(self):
+        rates = set()
+        for file in self.files:
+            rates.add(file["samplerate"])
+        if len(rates) == 0:
+            raise ValueError("No input files selected")
+        elif len(rates) != 1:
+            raise ValueError(f"Inputs have inconsistent sample rates: {rates}")
+        return rates.pop()
+
+    def run(self):
+        print(self.files, self.sampleRate)
+
+
 # def do_pack(args):
 #     inputs = [np.load(f) for f in args.inputs]
 #     sr = find_common_sample_rate(inputs)
@@ -437,73 +554,6 @@ class FileScanner:
 #     tqdm.write(f"Completed {filename}")
 
 
-def args_for_pack(subparsers):
-    default_res = 0.01
-    default_min = 3
-    default_width = 3.0
-    default_mark = 8
-
-    parser = subparsers.add_parser(
-        "pack",
-        description="Build a compressed grain database from multiple uncompressed inputs",
-    )
-    parser.set_defaults(func=do_pack)
-
-    parser.add_argument(
-        "inputs",
-        metavar="SRC",
-        nargs="+",
-        help="one or more npz files produced by the scan command",
-    )
-    parser.add_argument(
-        "-o",
-        metavar="DEST",
-        dest="output",
-        help="name of packed output file [voice-###.rvv]",
-    )
-
-    parser.add_argument(
-        "-w",
-        metavar="S",
-        dest="width",
-        type=float,
-        default=default_width,
-        help=f"maximum grain width in seconds [{default_width}]",
-    )
-    parser.add_argument(
-        "-n",
-        metavar="N",
-        dest="max",
-        type=int,
-        help="maximum number of grains per bin [no limit]",
-    )
-
-    parser.add_argument(
-        "--res",
-        dest="res",
-        metavar="ST",
-        type=float,
-        default=default_res,
-        help=f"pitch binning resolution in semitones [{default_res}]",
-    )
-    parser.add_argument(
-        "--min",
-        dest="min",
-        metavar="N",
-        type=int,
-        default=default_min,
-        help=f"discard bins with fewer than this minimum number of grains [{default_min}]",
-    )
-    parser.add_argument(
-        "--mark",
-        dest="mark",
-        metavar="N",
-        type=int,
-        default=default_mark,
-        help=f"mark discontinuities with an N sample long noise [{default_mark}]",
-    )
-
-
 def main():
     parser = argparse.ArgumentParser()
     Database.arguments(parser)
@@ -511,7 +561,19 @@ def main():
     FileScanner.arguments(
         subparsers.add_parser(
             "scan",
-            description="Run pitch detection on batches of audio files, output an uncompressed grain database",
+            description="Run pitch detection on batches of audio files, updating the feature database",
+        )
+    )
+    FileListing.arguments(
+        subparsers.add_parser(
+            "list",
+            description="Show information about the files in the audio feature database",
+        )
+    )
+    FilePacker.arguments(
+        subparsers.add_parser(
+            "pack",
+            description="Compact a portion of the feature database into a self-contained archive",
         )
     )
     args = parser.parse_args()
