@@ -61,6 +61,15 @@ class Database:
         for row in cur.execute(sql, params):
             yield dict(zip((d[0] for d in cur.description), row))
 
+    def pitchFeaturesArray(self, fileId):
+        cur = self.con.cursor()
+        cur.execute(
+            "select time, f0, probability from pitch_features "
+            "where file = ? order by time asc",
+            (fileId,),
+        )
+        return np.asarray(cur.fetchall()).reshape((-1, 3))
+
     def __init__(self, args):
         self.con = sqlite3.connect(args.databaseFile)
         self.con.executescript(
@@ -312,17 +321,20 @@ class FileListing:
 
 class FilePacker:
     def arguments(parser):
+        default_output = time.strftime("voice-%Y%m%d%H%M%S.rvv")
         default_res = 0.01
         default_min = 3
         default_width = 3.0
         default_mark = 8
+        default_vprob = 0.99
         Database.queryArguments(parser)
         parser.set_defaults(factory=FilePacker)
         parser.add_argument(
             "-o",
             metavar="DEST",
             dest="output",
-            help="name of packed output file [voice-###.rvv]",
+            default=default_output,
+            help=f"name of packed output file [{default_output}]",
         )
         parser.add_argument(
             "-w",
@@ -338,6 +350,14 @@ class FilePacker:
             dest="max",
             type=int,
             help="maximum number of grains per bin [no limit]",
+        )
+        parser.add_argument(
+            "--vprob",
+            dest="vprob",
+            metavar="P",
+            type=float,
+            default=default_vprob,
+            help=f"minimum voicing probability [{default_vprob}]",
         )
         parser.add_argument(
             "--res",
@@ -368,97 +388,96 @@ class FilePacker:
         self.db = Database(args)
         self.files = list(self.db.iterFiles(args))
         self.sampleRate = self._findCommonSampleRate()
+        self.widthInSamples = int(args.width * self.sampleRate)
         self.args = args
 
     def _findCommonSampleRate(self):
         rates = set()
-        for file in self.files:
-            rates.add(file["samplerate"])
+        for row in self.files:
+            rates.add(row["samplerate"])
         if len(rates) == 0:
             raise ValueError("No input files selected")
         elif len(rates) != 1:
             raise ValueError(f"Inputs have inconsistent sample rates: {rates}")
         return rates.pop()
 
+    def _buildCombinedIndex(self):
+        f0, gx, ii = [], [], []
+        for i, row in enumerate(self.files):
+            assert self.sampleRate == row["samplerate"]
+            features = self.db.pitchFeaturesArray(row["id"])
+
+            igx = (features[:, 0] * self.sampleRate).astype(int)
+            if0 = features[:, 1]
+            iv = features[:, 2]
+            iylen = int(self.sampleRate * row["duration"])
+
+            # Discard features that are below the minimum probability
+            a = iv >= self.args.vprob
+            igx, if0 = igx[a], if0[a]
+
+            # Discard grains that would touch the boundaries between inputs
+            a = (igx > self.widthInSamples) & (igx < (iylen - self.widthInSamples - 1))
+            if0, igx = if0[a], igx[a]
+
+            f0.append(if0)
+            gx.append(igx)
+            ii.append(np.full(if0.shape, i))
+
+        # Sorting, first by f0 and then by the final grain location (i, x)
+        f0, gx, ii = map(np.concatenate, (f0, gx, ii))
+        a = np.lexsort((gx, ii, f0))
+        self.f0, self.gx, self.ii = f0[a], gx[a], ii[a]
+        if not len(self.f0):
+            raise ValueError("No grains selected")
+
+    def _buildCompactIndex(self):
+        rng = np.random.default_rng()
+
+        # Allocate small frequency bins spaced evenly in the mel scale
+        f0_range = (self.f0[0] - 0.1, self.f0[-1] + 0.1)
+        max_bins = int(np.ceil(12 * f0_range[1] / f0_range[0] / self.args.res))
+        mel_range = librosa.hz_to_mel(f0_range, htk=True)
+        mel_bins = np.linspace(mel_range[0], mel_range[1], max_bins + 1)
+        bins = librosa.mel_to_hz(mel_bins, htk=True)
+        bin_x = np.searchsorted(self.f0, bins)
+
+        cf0, cgx, cii, self.bf0, self.bx = [], [], [], [], []
+        next_bx = 0
+        for bin_id in range(len(bins) - 1):
+
+            # Choose grains randomly if we have more than requested
+            choices = np.arange(bin_x[bin_id], bin_x[bin_id + 1])
+            rng.shuffle(choices)
+            choices = choices[: self.args.max]
+            choices.sort()
+
+            # Skip empty or underfull bins
+            if len(choices) < max(1, self.args.min):
+                continue
+
+            # Save chosen grains
+            for c, o in ((cf0, self.f0), (cgx, self.gx), (cii, self.ii)):
+                c.append(o[choices])
+
+            # Update bin index
+            self.bf0.append(cf0[-1].mean())
+            self.bx.append(next_bx)
+            next_bx += len(choices)
+
+        if not len(cgx):
+            raise ValueError("No grains left in compacted data")
+        self.bx.append(next_bx)
+        self.cgx, self.cii = map(np.concatenate, (cgx, cii))
+        tqdm.tqdm.write(f"Using {len(self.cgx)} grains in {len(self.bf0)} bins")
+        assert len(self.cgx) == len(self.cii)
+        assert len(self.bf0) + 1 == len(self.bx)
+
     def run(self):
-        print(self.files, self.sampleRate)
+        self._buildCombinedIndex()
+        self._buildCompactIndex()
 
 
-# def do_pack(args):
-#     inputs = [np.load(f) for f in args.inputs]
-#     sr = find_common_sample_rate(inputs)
-#     width_in_samples = int(args.width * sr)
-#
-#     def build_combined_grain_index():
-#         f0, gx, ii, total_grains = [], [], [], 0
-#         for i, npz in enumerate(inputs):
-#             if0, igx, iylen = npz["f0"], npz["x"], int(npz["ylen"])
-#             assert len(if0) == len(igx)
-#             total_grains += len(igx)
-#
-#             # Discard grains that will touch the boundary between inputs
-#             a = (igx > width_in_samples) & (igx < (iylen - width_in_samples - 1))
-#             if0, igx = if0[a], igx[a]
-#
-#             f0.append(if0)
-#             gx.append(igx)
-#             ii.append(np.full(if0.shape, i))
-#
-#         # Sorting, first by f0 and then by the final grain location (i, x)
-#         f0, gx, ii = map(np.concatenate, (f0, gx, ii))
-#         a = np.lexsort((gx, ii, f0))
-#         f0, gx, ii = f0[a], gx[a], ii[a]
-#         return f0, gx, ii, total_grains
-#
-#     f0, gx, ii, total_grains = build_combined_grain_index()
-#     tqdm.write(f"Indexing {total_grains} total grains")
-#
-#     def build_compact_index():
-#         rng = np.random.default_rng()
-#
-#         # Allocate small frequency bins spaced evenly in the mel scale
-#         f0_range = (f0[0] - 0.1, f0[-1] + 0.1)
-#         max_bins = int(np.ceil(12 * f0_range[1] / f0_range[0] / args.res))
-#         mel_range = librosa.hz_to_mel(f0_range, htk=True)
-#         mel_bins = np.linspace(mel_range[0], mel_range[1], max_bins + 1)
-#         bins = librosa.mel_to_hz(mel_bins, htk=True)
-#         bin_x = np.searchsorted(f0, bins)
-#
-#         cf0, cgx, cii, bf0, bx = [], [], [], [], []
-#         next_bx = 0
-#         for bin_id in range(len(bins) - 1):
-#
-#             # Choose grains randomly if we have more than requested
-#             choices = np.arange(bin_x[bin_id], bin_x[bin_id + 1])
-#             rng.shuffle(choices)
-#             choices = choices[: args.max]
-#             choices.sort()
-#
-#             # Skip empty or underfull bins
-#             if len(choices) < max(1, args.min):
-#                 continue
-#
-#             # Save chosen grains
-#             for c, o in ((cf0, f0), (cgx, gx), (cii, ii)):
-#                 c.append(o[choices])
-#
-#             # Update bin index
-#             bf0.append(cf0[-1].mean())
-#             bx.append(next_bx)
-#             next_bx += len(choices)
-#
-#         if not len(cgx):
-#             raise ValueError("No grains left in compacted data")
-#         bx.append(next_bx)
-#         cgx, cii = map(np.concatenate, (cgx, cii))
-#         return cgx, cii, bf0, bx
-#
-#     cgx, cii, bf0, bx = build_compact_index()
-#     tqdm.write(
-#         f"Using {len(cgx)} grains ({len(cgx)/total_grains:.2%}) in {len(bf0)} bins"
-#     )
-#     assert len(cgx) == len(cii)
-#     assert len(bf0) + 1 == len(bx)
 #
 #     def collect_audio_data(file):
 #         # The compact index we have is sorted in f0 order.
