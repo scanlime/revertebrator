@@ -44,7 +44,7 @@ class Database:
 
     def iterFiles(self, args):
         sql = """
-            select id, path, samplerate, duration,
+            select id, path, samplerate, channels, duration,
                 (select count(pitch_features.time)
                 from pitch_features where files.id == pitch_features.file)
                     as numPitchFeatures
@@ -76,7 +76,7 @@ class Database:
             """
             create table if not exists files
                 (id integer primary key autoincrement, path varchar unique,
-                samplerate real, duration real);
+                samplerate real, channels integer, duration real);
             create table if not exists pitch_features
                 (file integer, f0 real, probability real, time real);
             create index if not exists file_path on files(path);
@@ -94,8 +94,8 @@ class Database:
         cur = self.con.cursor()
         cur.execute("begin")
         cur.execute(
-            "insert into files(path, samplerate, duration) values (?,?,?)",
-            (path, audio.samplerate, audio.duration),
+            "insert into files(path, samplerate, channels, duration) values (?,?,?,?)",
+            (path, audio.samplerate, audio.channels, audio.duration),
         )
         fileId = cur.lastrowid
         rows = []
@@ -314,6 +314,7 @@ class FileListing:
             print(
                 f"{row['path']}\t"
                 f"{row['samplerate']} Hz\t"
+                f"{row['channels']} ch\t"
                 f"{row['duration']} seconds\t"
                 f"{row['numPitchFeatures']} pitch features"
             )
@@ -389,6 +390,7 @@ class FilePacker:
         self.files = list(self.db.iterFiles(args))
         self.sampleRate = self._findCommonSampleRate()
         self.widthInSamples = int(args.width * self.sampleRate)
+        self.marker = (pow(-1, np.arange(0, self.args.mark)) * 0x7FFF).astype(np.int16)
         self.args = args
 
     def _findCommonSampleRate(self):
@@ -469,108 +471,99 @@ class FilePacker:
             raise ValueError("No grains left in compacted data")
         self.bx.append(next_bx)
         self.cgx, self.cii = map(np.concatenate, (cgx, cii))
-        tqdm.tqdm.write(f"Using {len(self.cgx)} grains in {len(self.bf0)} bins")
         assert len(self.cgx) == len(self.cii)
         assert len(self.bf0) + 1 == len(self.bx)
+        tqdm.tqdm.write(f"Using {len(self.cgx)} grains in {len(self.bf0)} bins")
+
+    def _collectAudioData(self, file):
+        # The compact index we have is sorted in f0 order.
+        # Figure out a new ordering sorted by input file, and collect those grains
+        yygx = np.full(self.cgx.shape, -1)
+        ixsort = np.lexsort((self.cgx, self.cii))
+        imemo = {}
+        writerOffset = 0
+        for grain in tqdm.tqdm(ixsort, unit="grain", unit_scale=True):
+            i, x = self.cii[grain], self.cgx[grain]
+            if i != imemo.get("i"):
+                path = self.files[i]['path']
+                tqdm.tqdm.write(f"Reading {path}")
+                imemo = dict(i=i, grainEnd=0, reader=audioread.audio_open(path), readerOffset=0, buffer=[])
+
+            # Copy the portion that doesn't overlap what we already copied
+            grainBegin = max(x - self.widthInSamples, imemo['grainEnd'])
+            grainEnd = x + self.widthInSamples
+
+            if grainBegin != imemo["grainEnd"] or 0 == imemo["grainEnd"]:
+                # Mark discontinuities between non-adjacent grains, and across input edges
+                file.write(self.marker)
+                writerOffset += len(self.marker)
+
+            # Updated locations in the grain index
+            assert self.widthInSamples <= x and x < grainEnd
+            yygx[grain] = writerOffset + x - grainBegin
+
+            y = np.round(imemo["y"][grain_begin:grain_end] * 0x7FFF).astype(np.int16)
+            file.write(y)
+            writerOffset += len(y)
+            imemo["grainEnd"] = grainEnd
+
+        # We already marked the beginning of every input file, mark the end too
+        file.write(self.marker)
+        writerOffset += len(self.marker)
+
+        return yygx, {
+            "sound_len": writerOffset,
+            "max_grain_width": self.args.width,
+            "sample_rate": self.sampleRate,
+            "bin_x": list(map(int, bx)),
+            "bin_f0": list(map(float, bf0)),
+        }
 
     def run(self):
         self._buildCombinedIndex()
         self._buildCompactIndex()
 
+        filename = self.args.output
+        if os.path.splitext(filename)[1] != ".rvv":
+            filename += ".rvv"
+        if os.path.lexists(filename):
+            raise IOError(f"Will not overwrite existing file at '{filename}'")
 
-#
-#     def collect_audio_data(file):
-#         # The compact index we have is sorted in f0 order.
-#         # Figure out a new ordering sorted by input file, and collect those grains
-#
-#         yy_ptr = 0
-#         yygx = np.full(cgx.shape, -1)
-#         ixsort = np.lexsort((cgx, cii))
-#         imemo = {}
-#         samples_per_input = {}
-#         marker = (pow(-1, np.arange(0, args.mark)) * 0x7FFF).astype(np.int16)
-#
-#         for grain in tqdm(ixsort, unit="grain", unit_scale=True):
-#             i, x = cii[grain], cgx[grain]
-#             if i != imemo.get("i"):
-#                 tqdm.write(f"Reading {args.inputs[i]}")
-#                 imemo = dict(i=i, y=inputs[i]["y"], end=0)
-#
-#             # Copy the portion that doesn't overlap what we already copied
-#             grain_begin = x - width_in_samples
-#             grain_end = x + width_in_samples
-#             assert grain_begin >= 0 and grain_end < len(imemo["y"])
-#             grain_begin = max(grain_begin, imemo["end"])
-#
-#             if grain_begin != imemo["end"] or 0 == imemo["end"]:
-#                 # Mark discontinuities between non-adjacent grains, and across input edges
-#                 file.write(marker)
-#                 yy_ptr += len(marker)
-#
-#             # Updated locations in the grain index
-#             assert width_in_samples <= x and x < grain_end
-#             yygx[grain] = yy_ptr + x - grain_begin
-#
-#             y = np.round(imemo["y"][grain_begin:grain_end] * 0x7FFF).astype(np.int16)
-#             file.write(y)
-#             yy_ptr += len(y)
-#             samples_per_input[i] = samples_per_input.get(i, 0) + len(y)
-#             imemo["end"] = grain_end
-#
-#         # We already marked the beginning of every input file, mark the end too
-#         file.write(marker)
-#         yy_ptr += len(marker)
-#
-#         for i, name in enumerate(args.inputs):
-#             active = samples_per_input.get(i, 0)
-#             total = inputs[i]["ylen"]
-#             tqdm.write(f"{name} using {active} samples, {active/total:.2%}")
-#
-#         return yygx, {
-#             "sound_len": yy_ptr,
-#             "max_grain_width": args.width,
-#             "sample_rate": sr,
-#             "bin_x": list(map(int, bx)),
-#             "bin_f0": list(map(float, bf0)),
-#         }
-#
-#     filename = args.output or time.strftime("voice-%Y%m%d%H%M%S")
-#     if os.path.splitext(filename)[1] != ".rvv":
-#         filename += ".rvv"
-#     if os.path.lexists(filename):
-#         raise IOError(f"Will not overwrite existing file at '{filename}'")
-#
-#     with zipfile.ZipFile(filename, "x", zipfile.ZIP_STORED) as z:
-#         with tempfile.TemporaryFile(dir=os.path.dirname(filename)) as tmp:
-#             with soundfile.SoundFile(tmp, "w", sr, 1, "PCM_16", format="flac") as sound:
-#                 yygx, index = collect_audio_data(sound)
-#
-#             tmp.seek(0, os.SEEK_END)
-#             tmpLen = tmp.tell()
-#             tmp.seek(0)
-#
-#             z.writestr(
-#                 zipfile.ZipInfo("index.json"),
-#                 json.dumps(index) + "\n",
-#                 zipfile.ZIP_DEFLATED,
-#                 9,
-#             )
-#             z.writestr(
-#                 zipfile.ZipInfo("grains.u64"),
-#                 yygx.astype("<u8").tobytes(),
-#                 zipfile.ZIP_DEFLATED,
-#                 9,
-#             )
-#             with z.open(zipfile.ZipInfo("sound.flac"), "w", force_zip64=True) as f:
-#                 with tqdm(total=tmpLen, unit="byte", unit_scale=True) as progress:
-#                     while True:
-#                         block = tmp.read(1024 * 1024)
-#                         if not block:
-#                             break
-#                         f.write(block)
-#                         progress.update(len(block))
-#
-#     tqdm.write(f"Completed {filename}")
+        with zipfile.ZipFile(filename, "x", zipfile.ZIP_STORED) as z:
+            with tempfile.TemporaryFile(dir=os.path.dirname(filename)) as tmp:
+                with soundfile.SoundFile(
+                    tmp, "w", int(self.sampleRate), 1, "PCM_16", format="flac"
+                ) as sound:
+                    yygx, index = self._collectAudioData(sound)
+
+                tmp.seek(0, os.SEEK_END)
+                tmpLen = tmp.tell()
+                tmp.seek(0)
+
+                z.writestr(
+                    zipfile.ZipInfo("index.json"),
+                    json.dumps(index) + "\n",
+                    zipfile.ZIP_DEFLATED,
+                    9,
+                )
+                z.writestr(
+                    zipfile.ZipInfo("grains.u64"),
+                    yygx.astype("<u8").tobytes(),
+                    zipfile.ZIP_DEFLATED,
+                    9,
+                )
+                with z.open(zipfile.ZipInfo("sound.flac"), "w", force_zip64=True) as f:
+                    with tqdm.tqdm(
+                        total=tmpLen, unit="byte", unit_scale=True
+                    ) as progress:
+                        while True:
+                            block = tmp.read(1024 * 1024)
+                            if not block:
+                                break
+                            f.write(block)
+                            progress.update(len(block))
+
+        tqdm.tqdm.write(f"Completed {filename}")
 
 
 def main():
