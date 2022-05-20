@@ -14,132 +14,227 @@ import random
 import soundfile
 import tempfile
 import time
+import sqlite3
 import warnings
 import zipfile
 
 
+class Database:
+    def arguments(parser):
+        databaseFile = "rvtool.db"
+        parser.add_argument(
+            "-f",
+            metavar="FILE",
+            dest="databaseFile",
+            default=databaseFile,
+            help=f"name of database file to use [{databaseFile}]",
+        )
+
+    def __init__(self, args):
+        self.con = sqlite3.connect(args.databaseFile)
+        self.con.executescript(
+            """
+            create table if not exists files
+                (id integer primary key autoincrement, path varchar unique,
+                samplerate real, duration real);
+            create table if not exists pitch_features
+                (file integer, f0 real, probability real, time real);
+            create index if not exists file_path on files(path);
+            create index if not exists pitch_features_loc on pitch_features(file, time);
+            create index if not exists pitch_features_f0 on pitch_features(f0);
+        """
+        )
+
+    def hasFile(self, path):
+        cur = self.con.cursor()
+        cur.execute("select count(id) from files where path = ?", (path,))
+        return cur.fetchone()[0] == 1
+
+    def storeFile(self, path, audio, blocks):
+        cur = self.con.cursor()
+        cur.execute("begin")
+        cur.execute(
+            "insert into files(path, samplerate, duration) values (?,?,?)",
+            (path, audio.samplerate, audio.duration),
+        )
+        fileId = cur.lastrowid
+        rows = []
+        for (f0, v, times) in blocks:
+            assert len(f0) == len(v)
+            assert len(f0) == len(times)
+            rows.extend((fileId, f0[i], v[i], times[i]) for i in range(len(f0)))
+        cur.executemany(
+            "insert into pitch_features(file, f0, probability, time) values (?,?,?,?)",
+            rows,
+        )
+        cur.execute("commit")
+
+
 class FileScanner:
-    parallelism = os.cpu_count() // 2
-    secondsPerBlock = 4
-    secondsOverlap = 1
-    minVoicedProbability = 0.99
-    freqMinHz = librosa.note_to_hz("C1")
-    freqMaxHz = librosa.note_to_hz("C6")
-    freqResolutionSemitones = 0.01
+    def arguments(parser):
+        parallelism = os.cpu_count()
+        secondsPerBlock = 8
+        secondsOverlap = 1
+        freqMinHz = librosa.note_to_hz("C1")
+        freqMaxHz = librosa.note_to_hz("C6")
+        resolution = 0.05
+        parser.set_defaults(factory=FileScanner)
+        parser.add_argument(
+            "-P",
+            metavar="N",
+            dest="parallelism",
+            type=int,
+            default=parallelism,
+            help="number of parallel jobs to run [{parallelism}]",
+        )
+        parser.add_argument(
+            "--block-size",
+            metavar="SEC",
+            dest="secondsPerBlock",
+            type=float,
+            default=secondsPerBlock,
+            help="length of audio blocks to process, in seconds [{secondsPerBlock}]",
+        )
+        parser.add_argument(
+            "--block-overlap",
+            metavar="SEC",
+            dest="secondsOverlap",
+            type=float,
+            default=secondsOverlap,
+            help="amount of overlap between audio blocks, in seconds [{secondsOverlap}]",
+        )
+        parser.add_argument(
+            "--fmin",
+            dest="freqMinHz",
+            metavar="HZ",
+            type=float,
+            default=freqMinHz,
+            help=f"lowest pitch to detect, in hz [{freqMinHz}]",
+        )
+        parser.add_argument(
+            "--fmax",
+            dest="freqMaxHz",
+            metavar="HZ",
+            type=float,
+            default=freqMaxHz,
+            help=f"highest pitch to detect, in hz [{freqMaxHz}]",
+        )
+        parser.add_argument(
+            "--res",
+            dest="resolution",
+            metavar="ST",
+            type=float,
+            default=resolution,
+            help=f"pitch detection resolution in semitones [{resolution}]",
+        )
+        parser.add_argument(
+            "inputs",
+            metavar="SRC",
+            nargs="+",
+            help="files and directories to scan for audio",
+        )
 
-    def __init__(self, inputs):
-        self.manager = multiprocessing.managers.SharedMemoryManager()
-        self.manager.start()
-        self.paths = multiprocessing.Queue()
-        self.blocks = multiprocessing.Queue()
-        self.results = multiprocessing.Queue()
-        for i in inputs:
-            self.paths.put(os.path.abspath(i))
-
-    def run(self, outputFile):
-        self._start()
-        self._showProgressUntilQueuesDrain()
-        self._stop()
-        self._collectResults(outputFile)
-
-    def _collectResults(self, outputFile):
-        byPath = {}
-        try:
-            while True:
-                path, sampleRate, resultF0, resultX = self.results.get(False)
-                xf0 = byPath.setdefault(path, (path, sampleRate, {}))[2]
-                for (f0, x) in zip(resultF0, resultX):
-                    xf0[x] = f0
-        except queue.Empty:
-            pass
-        jsonResult = {}
-        for path, sampleRate, xf0 in byPath.values():
-            xf0 = list(xf0.items())
-            xf0.sort()
-            jsonResult[path] = dict(
-                sr=sampleRate, x=[i[0] for i in xf0], f0=[i[1] for i in xf0]
-            )
-        json.dump(jsonResult, outputFile)
-
-    def _showProgressUntilQueuesDrain(self):
-        fileProgress = tqdm.tqdm(unit="file")
-        resultProgress = tqdm.tqdm(unit="block")
-        queueIdleTimer = 0
-        while True:
-            time.sleep(0.1)
-            pathsQueued = self.paths.qsize()
-            blocksQueued = self.blocks.qsize()
-            fileProgress.update(pathsQueued - fileProgress.n)
-            resultProgress.update(self.results.qsize() - resultProgress.n)
-            if self.blocks.qsize() == 0 and self.paths.qsize() == 0:
-                queueIdleTimer += 1
-                if queueIdleTimer > 100:
-                    return
-            else:
-                queueIdleTimer = 0
+    def __init__(self, args):
+        self.db = Database(args)
+        self.args = args
+        self.pendingFiles = []
+        self.pendingBlocks = []
 
     def _start(self):
-        self.pool = []
-        for _ in range(self.parallelism):
-            p = multiprocessing.Process(target=self._worker)
-            p.start()
-            self.pool.append(p)
+        self.manager = multiprocessing.managers.SharedMemoryManager()
+        self.manager.start()
+        self.pool = multiprocessing.Pool(self.args.parallelism)
 
     def _stop(self):
-        for _ in self.pool:
-            self.paths.put(None)
-        for p in self.pool:
-            while p.is_alive():
-                p.join(1)
+        self.pool.close()
+        self.pool.join()
+        self.manager.shutdown()
 
-    def _worker(self):
-        while True:
-            # Prioritize processing loaded blocks
+    def run(self):
+        self._start()
+        try:
+            self._visitInputs()
+        finally:
+            self._stop()
+            self._storeCompletedFiles()
+
+    def _visitInputs(self):
+        files = set()
+        for input in tqdm.tqdm(self.args.inputs, unit="input"):
+            for (dirpath, dirnames, filenames) in os.walk(input):
+                for filename in filenames:
+                    files.add(os.path.realpath(os.path.join(dirpath, filename)))
+        for path in tqdm.tqdm(files, unit="file"):
+            self._visitFile(path)
+            self._storeCompletedFiles()
+
+    def _visitFile(self, path):
+        if not self.db.hasFile(path):
             try:
-                block = self.blocks.get(False)
-                self._scanBlock(*block)
-                continue
-            except queue.Empty:
+                with audioread.audio_open(path) as audio:
+                    self._readAudio(path, audio)
+            except (EOFError, audioread.exceptions.NoBackendError):
                 pass
 
-            # Process paths when the block queue is empty
-            try:
-                path = self.paths.get(False)
-                if path is None:
-                    return
-                if os.path.isdir(path):
-                    self._directoryToFiles(path)
-                elif os.path.isfile(path):
-                    self._fileToBlocks(path)
-            except queue.Empty:
-                time.sleep(1)
-
-    def _directoryToFiles(self, path):
-        for subdir in os.scandir(path):
-            self.paths.put(os.path.join(path, subdir))
-
-    def _fileToBlocks(self, path):
-        try:
-            with audioread.audio_open(path) as audio:
-                self._audioToBlocks(path, audio)
-        except (EOFError, audioread.exceptions.NoBackendError):
-            pass
-
-    def _enqueueBlock(self, path, sampleRate, sampleOffset, i16Samples):
+    def _enqueueBlock(self, sampleRate, sampleOffset, i16Samples):
+        # Do the mixdown to mono and the int to float conversion as we copy
+        # from the audioread output buffer to a shared memory buffer
         numSamples = i16Samples.shape[0]
         shm = self.manager.SharedMemory(numSamples * 8)
         shmArray = np.ndarray((numSamples,), dtype=float, buffer=shm.buf)
         np.sum(i16Samples, dtype=float, out=shmArray, axis=-1)
         shmArray *= 1 / 0x7FFF
-        self.blocks.put((path, sampleRate, sampleOffset, numSamples, shm))
+        block = self.pool.apply_async(
+            self.__class__._blockWorker, (self.args, sampleRate, sampleOffset, shm)
+        )
+        self.pendingBlocks.append(block)
+        return block
 
-    def _audioToBlocks(self, path, audio):
-        sr = audio.samplerate
-        samplesPerBlock = int(sr * self.secondsPerBlock)
-        samplesBetweenBlocks = samplesPerBlock - int(sr * self.secondsOverlap)
+    def _blockWorker(args, sampleRate, sampleOffset, shm):
+        analysisRate = 22050
+        minProbability = 0.5
+        numSamples = shm.size // 8
+        samples = np.ndarray(numSamples, dtype=float, buffer=shm.buf)
+        resampled = librosa.resample(
+            samples, orig_sr=sampleRate, target_sr=analysisRate
+        )
+        shm.unlink()
+        f0, _, v = librosa.pyin(
+            resampled,
+            sr=analysisRate,
+            fmin=args.freqMinHz,
+            fmax=args.freqMaxHz,
+            fill_na=None,
+            resolution=args.resolution,
+        )
+        times = librosa.times_like(f0, sr=analysisRate) + (sampleOffset / sampleRate)
+        filter = v >= minProbability
+        return (f0[filter], v[filter], times[filter])
+
+    def _waitForPendingBlocks(self):
+        maxQueueDepth = self.args.parallelism * 3
+        while len(self.pendingBlocks) > maxQueueDepth:
+            self.pendingBlocks = [b for b in self.pendingBlocks if not b.ready()]
+            time.sleep(1)
+
+    def _storeCompletedFiles(self):
+        while self.pendingFiles:
+            path, audio, blocks = self.pendingFiles[0]
+            for block in blocks:
+                if not block.ready():
+                    return
+            self.db.storeFile(path, audio, [b.get() for b in blocks])
+            del self.pendingFiles[0]
+
+    def _readAudio(self, path, audio):
         bufOffset = 0
         bufLength = 0
         bufChunks = []
+        blocks = []
+        samplesPerBlock = int(audio.samplerate * self.args.secondsPerBlock)
+        samplesBetweenBlocks = samplesPerBlock - int(
+            audio.samplerate * self.args.secondsOverlap
+        )
         for chunk in audio:
             chunk = np.ndarray(
                 (len(chunk) // audio.channels // 2, audio.channels),
@@ -149,114 +244,22 @@ class FileScanner:
             bufChunks.append(chunk)
             bufLength += chunk.shape[0]
             while bufLength > samplesPerBlock:
+                self._waitForPendingBlocks()
                 bufChunks = [np.vstack(bufChunks)]
-                self._enqueueBlock(path, sr, bufOffset, bufChunks[0][:samplesPerBlock])
+                blocks.append(
+                    self._enqueueBlock(
+                        audio.samplerate, bufOffset, bufChunks[0][:samplesPerBlock]
+                    )
+                )
                 bufChunks = [bufChunks[0][samplesBetweenBlocks:]]
                 bufOffset += samplesBetweenBlocks
                 bufLength = bufChunks[0].shape[0]
-        self._enqueueBlock(path, sr, bufOffset, np.vstack(bufChunks))
-
-    def _scanBlock(
-        self, path, sampleRate, sampleOffset, numSamples, shm, analysisRate=22050
-    ):
-        samples = np.ndarray(numSamples, dtype=float, buffer=shm.buf)
-        resampled = librosa.resample(
-            samples, orig_sr=sampleRate, target_sr=analysisRate
+        blocks.append(
+            self._enqueueBlock(audio.samplerate, bufOffset, np.vstack(bufChunks))
         )
-        f0, _, v = librosa.pyin(
-            resampled,
-            sr=analysisRate,
-            fmin=self.freqMinHz,
-            fmax=self.freqMaxHz,
-            fill_na=None,
-            resolution=self.freqResolutionSemitones,
-        )
-        i = v >= self.minVoicedProbability
-        times = librosa.times_like(f0, sr=analysisRate)[i] + (sampleOffset / sampleRate)
-        self.results.put((path, sampleRate, f0[i], times))
-        shm.unlink()
+        self.pendingFiles.append((path, audio, blocks))
 
 
-def do_scan(args):
-    FileScanner(args.inputs).run(open("scanner.json", "w"))
-
-
-def do_pack(args):
-    pass
-
-
-# def file_scan_worker(work):
-#     # the soundfile loading fallback warning on every mp3 file gets old
-#     warnings.filterwarnings("ignore", module=librosa.__name__)
-#
-#     path, sr, fmin, fmax, res, vprob = work
-#     y, _ = librosa.load(path, sr=sr)
-#     f0, _, v = librosa.pyin(
-#         y, sr=sr, fmin=fmin, fmax=fmax, fill_na=None, resolution=res
-#     )
-#     times = librosa.times_like(f0)
-#     i = v >= vprob
-#     return (y, f0[i], times[i])
-#
-#
-# def do_scan(args):
-#     paths = []
-#     for src in args.inputs:
-#         if os.path.isdir(src):
-#             paths.extend(
-#                 os.path.join(src, d)
-#                 for d in os.listdir(src)[: args.file_limit]
-#                 if not d.startswith(".")
-#             )
-#         else:
-#             paths.append(src)
-#     random.shuffle(paths)
-#     if len(paths) > 1:
-#         tqdm.write(f"Processing {len(paths)} files")
-#
-#     grain_f0 = []
-#     grain_x = []
-#     samples = []
-#     offset = 0
-#     with tqdm(total=len(paths), unit="file", unit_scale=True) as progress:
-#         with multiprocessing.pool.Pool(args.parallelism) as pool:
-#             work = [
-#                 (p, args.sr, args.fmin, args.fmax, args.res, args.vprob) for p in paths
-#             ]
-#             results = pool.imap_unordered(file_scan_worker, work)
-#             for (sample, f0, times) in results:
-#                 grain_f0.append(f0)
-#                 grain_x.append(librosa.time_to_samples(times) + offset)
-#                 samples.append(sample)
-#                 offset += sample.shape[0]
-#                 progress.update()
-#
-#     filename = args.output or time.strftime(f"grains-%Y%m%d%H%M%S-{len(paths)}")
-#     if os.path.splitext(filename)[1] != ".npz":
-#         filename += ".npz"
-#     tqdm.write(f"Writing output to {filename}")
-#     if os.path.lexists(filename):
-#         raise IOError(f"Will not overwrite existing file at '{filename}'")
-#
-#     grain_f0 = np.concatenate(grain_f0)
-#     grain_x = np.concatenate(grain_x)
-#     samples = np.concatenate(samples)
-#     sortkey = np.lexsort((grain_x, grain_f0))
-#     grain_f0 = grain_f0[sortkey]
-#     grain_x = grain_x[sortkey]
-#     np.savez(
-#         filename,
-#         y=samples,
-#         f0=grain_f0,
-#         x=grain_x,
-#         ylen=len(samples),
-#         sr=args.sr,
-#         vprob=args.vprob,
-#         fmin=args.fmin,
-#         fmax=args.fmax,
-#     )
-#
-#
 # def find_common_sample_rate(inputs):
 #     rates = [npz["sr"] for npz in inputs]
 #     if max(rates) != min(rates):
@@ -434,89 +437,6 @@ def do_pack(args):
 #     tqdm.write(f"Completed {filename}")
 
 
-def args_for_scan(subparsers):
-    default_sr = 24000
-    default_vprob = 0.99
-    default_fmin = librosa.note_to_hz("C1")
-    default_fmax = librosa.note_to_hz("C6")
-    default_res = 0.05
-
-    parser = subparsers.add_parser(
-        "scan",
-        description="Run pitch detection on batches of audio files, output an uncompressed grain database",
-    )
-    parser.set_defaults(func=do_scan)
-
-    parser.add_argument(
-        "inputs",
-        metavar="SRC",
-        nargs="+",
-        help="sound file or directory with sound files to choose from",
-    )
-    parser.add_argument(
-        "-o",
-        metavar="DEST",
-        dest="output",
-        help="name of output file to generate [grains-###.npz]",
-    )
-
-    parser.add_argument(
-        "-n",
-        metavar="N",
-        dest="file_limit",
-        type=int,
-        help="maximum number of input files per directory",
-    )
-    parser.add_argument(
-        "-P",
-        metavar="N",
-        dest="parallelism",
-        type=int,
-        help="number of parallel jobs to run [#CPUs]",
-    )
-
-    parser.add_argument(
-        "--sr",
-        dest="sr",
-        metavar="HZ",
-        type=int,
-        default=default_sr,
-        help=f"sample rate to process and store at [{default_sr}]",
-    )
-    parser.add_argument(
-        "--vprob",
-        dest="vprob",
-        metavar="P",
-        type=float,
-        default=default_vprob,
-        help=f"minimum voicing probability [{default_vprob}]",
-    )
-    parser.add_argument(
-        "--fmin",
-        dest="fmin",
-        metavar="HZ",
-        type=float,
-        default=default_fmin,
-        help=f"lowest pitch to detect, in hz [{default_fmin}]",
-    )
-    parser.add_argument(
-        "--fmax",
-        dest="fmax",
-        metavar="HZ",
-        type=float,
-        default=default_fmax,
-        help=f"highest pitch to detect, in hz [{default_fmax}]",
-    )
-    parser.add_argument(
-        "--res",
-        dest="res",
-        metavar="ST",
-        type=float,
-        default=default_res,
-        help=f"pitch detection resolution in semitones [{default_res}]",
-    )
-
-
 def args_for_pack(subparsers):
     default_res = 0.01
     default_min = 3
@@ -586,11 +506,16 @@ def args_for_pack(subparsers):
 
 def main():
     parser = argparse.ArgumentParser()
+    Database.arguments(parser)
     subparsers = parser.add_subparsers(required=True)
-    args_for_scan(subparsers)
-    args_for_pack(subparsers)
+    FileScanner.arguments(
+        subparsers.add_parser(
+            "scan",
+            description="Run pitch detection on batches of audio files, output an uncompressed grain database",
+        )
+    )
     args = parser.parse_args()
-    args.func(args)
+    args.factory(args).run()
 
 
 if __name__ == "__main__":
