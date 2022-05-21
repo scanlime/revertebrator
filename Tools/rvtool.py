@@ -119,6 +119,7 @@ class Database:
             rows,
         )
         cur.execute("commit")
+        tqdm.tqdm.write(f"Finished {audio.path}")
 
 
 class BufferedAudioReader:
@@ -253,6 +254,7 @@ class FileScanner:
         files = list(files)
         random.shuffle(files)
         for path in tqdm.tqdm(files, unit="file"):
+            self._waitForPendingBlocks()
             self._visitFile(path)
             self._storeCompletedFiles()
 
@@ -307,6 +309,17 @@ class FileScanner:
         times = librosa.times_like(f0, sr=analysisRate) + (sampleOffset / sampleRate)
         filter = v >= minProbabilityToStore
         return (f0[filter], v[filter], times[filter])
+
+    def _waitForPendingBlocks(self, maxPendingBlocks=2048, maxPendingFiles=10):
+        while (
+            len(self.pendingBlocks) > maxPendingBlocks
+            or len(self.pendingFiles) > maxPendingFiles
+        ):
+            self.pendingBlocks = [b for b in self.pendingBlocks if not b.ready()]
+            tqdm.tqdm.write(
+                f"Queued: {len(self.pendingBlocks)} blocks, {len(self.pendingFiles)} files"
+            )
+            time.sleep(30)
 
     def _storeCompletedFiles(self):
         while self.pendingFiles:
