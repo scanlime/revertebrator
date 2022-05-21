@@ -22,7 +22,7 @@ class Database:
     def arguments(parser):
         databaseFile = os.path.expanduser("~/.local/share/rvtool.db")
         parser.add_argument(
-            "-f",
+            "-F",
             metavar="FILE",
             dest="databaseFile",
             default=databaseFile,
@@ -31,6 +31,7 @@ class Database:
 
     def queryArguments(parser):
         default_order = "path"
+        default_filter = "1"
         parser.add_argument(
             "-r",
             metavar="HZ",
@@ -51,19 +52,26 @@ class Database:
         )
         parser.add_argument(
             "-s",
-            metavar="ORDER",
+            metavar="SQL",
             dest="queryOrder",
             default=default_order,
-            help=f"column names or arbitrary SQL to use for sorting files [{default_order}]",
+            help=f"comma-separated list of expressions to sort files by [{default_order}]",
+        )
+        parser.add_argument(
+            "-f",
+            metavar="SQL",
+            dest="queryFilter",
+            default=default_filter,
+            help=f"additional SQL expression to filter results with [{default_filter}]",
         )
 
     def iterFiles(self, args):
-        sql = """
+        sql = f"""
             select id, path, samplerate, channels, duration,
                 (select count(pitch_features.time)
                 from pitch_features where files.id == pitch_features.file)
                     as numPitchFeatures
-            from files where 1
+            from files where ({args.queryFilter})
         """
         params = []
         if args.queryRate is not None:
