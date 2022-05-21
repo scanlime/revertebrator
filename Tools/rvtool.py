@@ -254,10 +254,13 @@ class FileScanner:
 
     def _visitFile(self, path):
         if not self.db.hasFile(path):
-            try:
-                self._readAudio(BufferedAudioReader(path))
-            except (EOFError, audioread.exceptions.NoBackendError):
-                pass
+            while True:
+                try:
+                    return self._readAudio(BufferedAudioReader(path))
+                except (EOFError, audioread.exceptions.NoBackendError):
+                    return
+                except audioread.ffdec.ReadTimeoutError:
+                    pass
 
     def _enqueueBlock(self, sampleRate, sampleOffset, i16Samples):
         # Do the mixdown to mono and the int to float conversion as we copy
