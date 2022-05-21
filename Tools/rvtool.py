@@ -253,6 +253,7 @@ class FileScanner:
         files = list(files)
         random.shuffle(files)
         for path in tqdm.tqdm(files, unit="file"):
+            self._waitForPendingBlocks()
             self._visitFile(path)
             self._storeCompletedFiles()
 
@@ -309,7 +310,7 @@ class FileScanner:
         return (f0[filter], v[filter], times[filter])
 
     def _waitForPendingBlocks(self):
-        maxQueueDepth = self.args.parallelism * 5
+        maxQueueDepth = self.args.parallelism * 2
         while len(self.pendingBlocks) > maxQueueDepth:
             self.pendingBlocks = [b for b in self.pendingBlocks if not b.ready()]
             time.sleep(1)
@@ -330,7 +331,6 @@ class FileScanner:
         )
         blocks = []
         for x in range(0, audio.numSamples, samplesBetweenBlocks):
-            self._waitForPendingBlocks()
             blocks.append(
                 self._enqueueBlock(audio.samplerate, x, audio.read(x, samplesPerBlock))
             )
