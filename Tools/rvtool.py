@@ -36,6 +36,12 @@ class Database:
             help=f"select files of a specified sample rate only",
         )
         parser.add_argument(
+            "-c",
+            metavar="N",
+            dest="queryChannels",
+            help=f"select files of a specified channel count only",
+        )
+        parser.add_argument(
             "-p",
             metavar="GLOB",
             dest="queryPath",
@@ -54,6 +60,9 @@ class Database:
         if args.queryRate is not None:
             sql += " and files.samplerate = ?"
             params.append(args.queryRate)
+        if args.queryChannels is not None:
+            sql += " and files.channels = ?"
+            params.append(args.queryChannels)
         if args.queryPath is not None:
             sql += " and files.path glob ?"
             params.append(args.queryPath)
@@ -90,12 +99,12 @@ class Database:
         cur.execute("select count(id) from files where path = ?", (path,))
         return cur.fetchone()[0] == 1
 
-    def storeFile(self, path, audio, blocks):
+    def storeFile(self, audio, blocks):
         cur = self.con.cursor()
         cur.execute("begin")
         cur.execute(
             "insert into files(path, samplerate, channels, duration) values (?,?,?,?)",
-            (path, audio.samplerate, audio.channels, audio.duration),
+            (audio.path, audio.samplerate, audio.channels, audio.duration),
         )
         fileId = cur.lastrowid
         rows = []
@@ -108,6 +117,40 @@ class Database:
             rows,
         )
         cur.execute("commit")
+
+
+class BufferedAudioReader:
+    def __init__(self, path):
+        self.path = path
+        self._reader = audioread.audio_open(path)
+        self.samplerate = self._reader.samplerate
+        self.duration = self._reader.duration
+        self.channels = self._reader.channels
+        self.numSamples = int(self.samplerate * self.duration)
+        self._buffer = [np.zeros((0, self.channels), dtype=np.int16)]
+        self._begin = 0
+        self._end = 0
+
+    def read(self, sampleOffset, numSamples):
+        if sampleOffset < self._begin:
+            raise ValueError("Buffered audio reader can't seek backwards")
+
+        for chunk in self._reader:
+            chunk = np.ndarray(
+                (len(chunk) // self.channels // 2, self.channels),
+                dtype=np.int16,
+                buffer=chunk,
+            )
+            self._buffer.append(chunk)
+            self._end += chunk.shape[0]
+            if self._end >= sampleOffset + numSamples:
+                break
+
+        discardLen = sampleOffset - self._begin
+        self._buffer = [np.vstack(self._buffer)[discardLen:]]
+        self._begin += discardLen
+        assert self._begin == sampleOffset
+        return self._buffer[0][:numSamples]
 
 
 class FileScanner:
@@ -211,8 +254,7 @@ class FileScanner:
     def _visitFile(self, path):
         if not self.db.hasFile(path):
             try:
-                with audioread.audio_open(path) as audio:
-                    self._readAudio(path, audio)
+                self._readAudio(BufferedAudioReader(path))
             except (EOFError, audioread.exceptions.NoBackendError):
                 pass
 
@@ -259,45 +301,25 @@ class FileScanner:
 
     def _storeCompletedFiles(self):
         while self.pendingFiles:
-            path, audio, blocks = self.pendingFiles[0]
+            audio, blocks = self.pendingFiles[0]
             for block in blocks:
                 if not block.ready():
                     return
-            self.db.storeFile(path, audio, [b.get() for b in blocks])
+            self.db.storeFile(audio, [b.get() for b in blocks])
             del self.pendingFiles[0]
 
-    def _readAudio(self, path, audio):
-        bufOffset = 0
-        bufLength = 0
-        bufChunks = []
-        blocks = []
+    def _readAudio(self, audio):
         samplesPerBlock = int(audio.samplerate * self.args.secondsPerBlock)
         samplesBetweenBlocks = samplesPerBlock - int(
             audio.samplerate * self.args.secondsOverlap
         )
-        for chunk in audio:
-            chunk = np.ndarray(
-                (len(chunk) // audio.channels // 2, audio.channels),
-                dtype=np.int16,
-                buffer=chunk,
+        blocks = []
+        for x in range(0, audio.numSamples, samplesBetweenBlocks):
+            self._waitForPendingBlocks()
+            blocks.append(
+                self._enqueueBlock(audio.samplerate, x, audio.read(x, samplesPerBlock))
             )
-            bufChunks.append(chunk)
-            bufLength += chunk.shape[0]
-            while bufLength > samplesPerBlock:
-                self._waitForPendingBlocks()
-                bufChunks = [np.vstack(bufChunks)]
-                blocks.append(
-                    self._enqueueBlock(
-                        audio.samplerate, bufOffset, bufChunks[0][:samplesPerBlock]
-                    )
-                )
-                bufChunks = [bufChunks[0][samplesBetweenBlocks:]]
-                bufOffset += samplesBetweenBlocks
-                bufLength = bufChunks[0].shape[0]
-        blocks.append(
-            self._enqueueBlock(audio.samplerate, bufOffset, np.vstack(bufChunks))
-        )
-        self.pendingFiles.append((path, audio, blocks))
+        self.pendingFiles.append((audio, blocks))
 
 
 class FileListing:
@@ -386,33 +408,44 @@ class FilePacker:
         )
 
     def __init__(self, args):
+        self.args = args
         self.db = Database(args)
         self.files = list(self.db.iterFiles(args))
-        self.sampleRate = self._findCommonSampleRate()
-        self.widthInSamples = int(args.width * self.sampleRate)
-        self.marker = (pow(-1, np.arange(0, self.args.mark)) * 0x7FFF).astype(np.int16)
-        self.args = args
+        self.samplerate = self._singleValuedFileProperty("samplerate")
+        self.channels = self._singleValuedFileProperty("channels")
+        self.widthInSamples = int(args.width * self.samplerate)
+        self.discontinuityMarker = (
+            (pow(-1, np.arange(0, args.mark)) * 0x7FFF)
+            .astype(np.int16)
+            .repeat(self.channels)
+            .reshape((-1, self.channels))
+        )
+        self.filename = args.output
+        if os.path.splitext(self.filename)[1] != ".rvv":
+            self.filename += ".rvv"
+        if os.path.lexists(self.filename):
+            raise IOError(f"Will not overwrite existing file at '{self.filename}'")
 
-    def _findCommonSampleRate(self):
-        rates = set()
+    def _singleValuedFileProperty(self, column):
+        values = set()
         for row in self.files:
-            rates.add(row["samplerate"])
-        if len(rates) == 0:
+            values.add(row[column])
+        if len(values) == 0:
             raise ValueError("No input files selected")
-        elif len(rates) != 1:
-            raise ValueError(f"Inputs have inconsistent sample rates: {rates}")
-        return rates.pop()
+        elif len(values) != 1:
+            raise ValueError(f"Inputs have inconsistent values for {column}, {values}")
+        return values.pop()
 
     def _buildCombinedIndex(self):
         f0, gx, ii = [], [], []
         for i, row in enumerate(self.files):
-            assert self.sampleRate == row["samplerate"]
+            assert self.samplerate == row["samplerate"]
             features = self.db.pitchFeaturesArray(row["id"])
 
-            igx = (features[:, 0] * self.sampleRate).astype(int)
+            igx = (features[:, 0] * self.samplerate).astype(int)
             if0 = features[:, 1]
             iv = features[:, 2]
-            iylen = int(self.sampleRate * row["duration"])
+            iylen = int(self.samplerate * row["duration"])
 
             # Discard features that are below the minimum probability
             a = iv >= self.args.vprob
@@ -485,54 +518,53 @@ class FilePacker:
         for grain in tqdm.tqdm(ixsort, unit="grain", unit_scale=True):
             i, x = self.cii[grain], self.cgx[grain]
             if i != imemo.get("i"):
-                path = self.files[i]['path']
+                path = self.files[i]["path"]
                 tqdm.tqdm.write(f"Reading {path}")
-                imemo = dict(i=i, grainEnd=0, reader=audioread.audio_open(path), readerOffset=0, buffer=[])
+                imemo = dict(i=i, grainEnd=0, reader=BufferedAudioReader(path))
 
             # Copy the portion that doesn't overlap what we already copied
-            grainBegin = max(x - self.widthInSamples, imemo['grainEnd'])
+            grainBegin = max(x - self.widthInSamples, imemo["grainEnd"])
             grainEnd = x + self.widthInSamples
 
             if grainBegin != imemo["grainEnd"] or 0 == imemo["grainEnd"]:
                 # Mark discontinuities between non-adjacent grains, and across input edges
-                file.write(self.marker)
-                writerOffset += len(self.marker)
+                file.write(self.discontinuityMarker)
+                writerOffset += len(self.discontinuityMarker)
 
             # Updated locations in the grain index
             assert self.widthInSamples <= x and x < grainEnd
             yygx[grain] = writerOffset + x - grainBegin
 
-            y = np.round(imemo["y"][grain_begin:grain_end] * 0x7FFF).astype(np.int16)
-            file.write(y)
-            writerOffset += len(y)
+            grainData = imemo["reader"].read(grainBegin, grainEnd - grainBegin)
+            file.write(grainData)
+            writerOffset += grainData.shape[0]
             imemo["grainEnd"] = grainEnd
 
         # We already marked the beginning of every input file, mark the end too
-        file.write(self.marker)
-        writerOffset += len(self.marker)
+        file.write(self.discontinuityMarker)
+        writerOffset += len(self.discontinuityMarker)
 
         return yygx, {
             "sound_len": writerOffset,
             "max_grain_width": self.args.width,
-            "sample_rate": self.sampleRate,
-            "bin_x": list(map(int, bx)),
-            "bin_f0": list(map(float, bf0)),
+            "sample_rate": self.samplerate,
+            "channels": self.channels,
+            "bin_x": list(map(int, self.bx)),
+            "bin_f0": list(map(float, self.bf0)),
         }
 
     def run(self):
         self._buildCombinedIndex()
         self._buildCompactIndex()
-
-        filename = self.args.output
-        if os.path.splitext(filename)[1] != ".rvv":
-            filename += ".rvv"
-        if os.path.lexists(filename):
-            raise IOError(f"Will not overwrite existing file at '{filename}'")
-
-        with zipfile.ZipFile(filename, "x", zipfile.ZIP_STORED) as z:
-            with tempfile.TemporaryFile(dir=os.path.dirname(filename)) as tmp:
+        with zipfile.ZipFile(self.filename, "x", zipfile.ZIP_STORED) as z:
+            with tempfile.TemporaryFile(dir=os.path.dirname(self.filename)) as tmp:
                 with soundfile.SoundFile(
-                    tmp, "w", int(self.sampleRate), 1, "PCM_16", format="flac"
+                    tmp,
+                    "w",
+                    int(self.samplerate),
+                    self.channels,
+                    "PCM_16",
+                    format="flac",
                 ) as sound:
                     yygx, index = self._collectAudioData(sound)
 
@@ -563,7 +595,7 @@ class FilePacker:
                             f.write(block)
                             progress.update(len(block))
 
-        tqdm.tqdm.write(f"Completed {filename}")
+        tqdm.tqdm.write(f"Completed {self.filename}")
 
 
 def main():
