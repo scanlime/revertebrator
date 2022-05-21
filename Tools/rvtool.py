@@ -310,14 +310,15 @@ class FileScanner:
         filter = v >= minProbabilityToStore
         return (f0[filter], v[filter], times[filter])
 
-    def _waitForPendingBlocks(self, maxPendingBlocks=200, maxPendingFiles=50):
+    def _waitForPendingBlocks(self):
+        maxPending = self.args.parallelism * 2
         while (
-            len(self.pendingBlocks) >= maxPendingBlocks
-            or len(self.pendingFiles) >= maxPendingFiles
+            len(self.pendingBlocks) >= maxPending
+            or len(self.pendingFiles) >= maxPending
         ):
             self.pendingBlocks = [b for b in self.pendingBlocks if not b.ready()]
             tqdm.tqdm.write(
-                f"Queued: {len(self.pendingBlocks)} blocks, {len(self.pendingFiles)} files"
+                f"Queued blocks: {len(self.pendingBlocks)}, files: {len(self.pendingFiles)}"
             )
             time.sleep(30)
             self._storeCompletedFiles()
