@@ -62,7 +62,7 @@ class Database:
             metavar="SQL",
             dest="queryFilter",
             default=default_filter,
-            help=f"additional SQL expression to filter results with [{default_filter}]",
+            help=f"additional expression to filter results with [{default_filter}]",
         )
 
     def iterFiles(self, args):
@@ -142,7 +142,7 @@ class BufferedAudioReader:
     def __init__(self, path):
         tqdm.tqdm.write(f"Reading {path}")
         self.path = path
-        self._reader = audioread.audio_open(path, [audioread.ffdec.FFmpegAudioFile])
+        self._reader = audioread.audio_open(path)
         self.samplerate = self._reader.samplerate
         self.duration = self._reader.duration
         self.channels = self._reader.channels
@@ -290,8 +290,8 @@ class FileScanner:
                 EOFError,
                 audioread.exceptions.NoBackendError,
                 audioread.ffdec.ReadTimeoutError,
-            ):
-                pass
+            ) as e:
+                tqdm.tqdm.write(f"Giving up on {path} because of error, {e}")
 
     def _enqueueBlock(self, sampleRate, sampleOffset, i16Samples):
         # Do the mixdown to mono and the int to float conversion as we copy
