@@ -310,10 +310,10 @@ class FileScanner:
         filter = v >= minProbabilityToStore
         return (f0[filter], v[filter], times[filter])
 
-    def _waitForPendingBlocks(self, maxPendingBlocks=2048, maxPendingFiles=10):
+    def _waitForPendingBlocks(self, maxPendingBlocks=1000, maxPendingFiles=10):
         while (
-            len(self.pendingBlocks) > maxPendingBlocks
-            or len(self.pendingFiles) > maxPendingFiles
+            len(self.pendingBlocks) >= maxPendingBlocks
+            or len(self.pendingFiles) >= maxPendingFiles
         ):
             self.pendingBlocks = [b for b in self.pendingBlocks if not b.ready()]
             tqdm.tqdm.write(
