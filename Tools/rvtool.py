@@ -362,6 +362,7 @@ class FilePacker:
         default_output = time.strftime("voice-%Y%m%d%H%M%S.rvv")
         default_res = 0.01
         default_min = 3
+        default_max = 500
         default_width = 3.0
         default_mark = 8
         default_vprob = 0.99
@@ -387,7 +388,8 @@ class FilePacker:
             metavar="N",
             dest="max",
             type=int,
-            help="maximum number of grains per bin [no limit]",
+            default=default_max,
+            help=f"maximum number of grains per bin [{default_max}]",
         )
         parser.add_argument(
             "--vprob",
