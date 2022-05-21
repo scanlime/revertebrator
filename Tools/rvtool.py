@@ -9,6 +9,7 @@ import multiprocessing.managers
 import numpy as np
 import os
 import queue
+import random
 import soundfile
 import sqlite3
 import tempfile
@@ -249,6 +250,8 @@ class FileScanner:
             for (dirpath, dirnames, filenames) in os.walk(input):
                 for filename in filenames:
                     files.add(os.path.realpath(os.path.join(dirpath, filename)))
+        files = list(files)
+        random.shuffle(files)
         for path in tqdm.tqdm(files, unit="file"):
             self._visitFile(path)
             self._storeCompletedFiles()
