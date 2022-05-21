@@ -122,6 +122,7 @@ class Database:
 
 class BufferedAudioReader:
     def __init__(self, path):
+        tqdm.tqdm.write(f"Reading {path}")
         self.path = path
         self._reader = audioread.audio_open(path)
         self.samplerate = self._reader.samplerate
@@ -254,13 +255,14 @@ class FileScanner:
 
     def _visitFile(self, path):
         if not self.db.hasFile(path):
-            while True:
-                try:
-                    return self._readAudio(BufferedAudioReader(path))
-                except (EOFError, audioread.exceptions.NoBackendError):
-                    return
-                except audioread.ffdec.ReadTimeoutError:
-                    pass
+            try:
+                self._readAudio(BufferedAudioReader(path))
+            except (
+                EOFError,
+                audioread.exceptions.NoBackendError,
+                audioread.ffdec.ReadTimeoutError,
+            ):
+                pass
 
     def _enqueueBlock(self, sampleRate, sampleOffset, i16Samples):
         # Do the mixdown to mono and the int to float conversion as we copy
@@ -523,7 +525,6 @@ class FilePacker:
             i, x = self.cii[grain], self.cgx[grain]
             if i != imemo.get("i"):
                 path = self.files[i]["path"]
-                tqdm.tqdm.write(f"Reading {path}")
                 imemo = dict(i=i, grainEnd=0, reader=BufferedAudioReader(path))
 
             # Copy the portion that doesn't overlap what we already copied
