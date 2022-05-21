@@ -174,6 +174,17 @@ class BufferedAudioReader:
 
 
 class FileScanner:
+    _ignoreExtensions = (
+        ".jpg",
+        ".png",
+        ".gif",
+        ".txt",
+        ".vtt",
+        ".json",
+        ".description",
+        ".gz",
+    )
+
     def arguments(parser):
         parallelism = os.cpu_count()
         secondsPerBlock = 8
@@ -266,7 +277,11 @@ class FileScanner:
         for input in tqdm.tqdm(self.args.inputs, unit="input"):
             for (dirpath, dirnames, filenames) in os.walk(input):
                 for filename in filenames:
-                    files.add(os.path.realpath(os.path.join(dirpath, filename)))
+                    if (
+                        not filename.startswith(".")
+                        and not os.path.splitext(filename)[1] in self._ignoreExtensions
+                    ):
+                        files.add(os.path.realpath(os.path.join(dirpath, filename)))
         files = list(files)
         random.shuffle(files)
         for path in tqdm.tqdm(files, unit="file"):
