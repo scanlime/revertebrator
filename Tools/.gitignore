@@ -1,4 +1,4 @@
 *.pyc
-*.npz
 *.rvv
+*.db
 venv/
