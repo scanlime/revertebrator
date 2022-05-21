@@ -298,7 +298,7 @@ class FileScanner:
         return (f0[filter], v[filter], times[filter])
 
     def _waitForPendingBlocks(self):
-        maxQueueDepth = self.args.parallelism * 3
+        maxQueueDepth = self.args.parallelism * 5
         while len(self.pendingBlocks) > maxQueueDepth:
             self.pendingBlocks = [b for b in self.pendingBlocks if not b.ready()]
             time.sleep(1)
