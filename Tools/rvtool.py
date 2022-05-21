@@ -30,6 +30,7 @@ class Database:
         )
 
     def queryArguments(parser):
+        default_order = "path"
         parser.add_argument(
             "-r",
             metavar="HZ",
@@ -47,6 +48,13 @@ class Database:
             metavar="GLOB",
             dest="queryPath",
             help=f"select file paths that match a glob pattern",
+        )
+        parser.add_argument(
+            "-s",
+            metavar="ORDER",
+            dest="queryOrder",
+            default=default_order,
+            help=f"column names or arbitrary SQL to use for sorting files [{default_order}]",
         )
 
     def iterFiles(self, args):
@@ -67,7 +75,7 @@ class Database:
         if args.queryPath is not None:
             sql += " and path glob ?"
             params.append(args.queryPath)
-        sql += " order by path"
+        sql += " order by " + args.queryOrder
         cur = self.con.cursor()
         for row in cur.execute(sql, params):
             yield dict(zip((d[0] for d in cur.description), row))
