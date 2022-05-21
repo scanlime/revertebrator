@@ -282,14 +282,20 @@ class FileScanner:
         return block
 
     def _blockWorker(args, sampleRate, sampleOffset, shm):
+        niceness = 10
         analysisRate = 22050
-        minProbability = 0.5
+        minProbabilityToStore = 0.5
+
+        if hasattr(os, "nice") and os.nice(0) < niceness:
+            os.nice(niceness)
+
         numSamples = shm.size // 8
         samples = np.ndarray(numSamples, dtype=float, buffer=shm.buf)
         resampled = librosa.resample(
             samples, orig_sr=sampleRate, target_sr=analysisRate
         )
         shm.unlink()
+
         f0, _, v = librosa.pyin(
             resampled,
             sr=analysisRate,
@@ -299,7 +305,7 @@ class FileScanner:
             resolution=args.resolution,
         )
         times = librosa.times_like(f0, sr=analysisRate) + (sampleOffset / sampleRate)
-        filter = v >= minProbability
+        filter = v >= minProbabilityToStore
         return (f0[filter], v[filter], times[filter])
 
     def _waitForPendingBlocks(self):
@@ -633,6 +639,4 @@ def main():
 
 
 if __name__ == "__main__":
-    if hasattr(os, "nice"):
-        os.nice(5)
     main()
