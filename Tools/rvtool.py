@@ -126,7 +126,7 @@ class BufferedAudioReader:
     def __init__(self, path):
         tqdm.tqdm.write(f"Reading {path}")
         self.path = path
-        self._reader = audioread.audio_open(path)
+        self._reader = audioread.audio_open(path, [audioread.ffdec.FFmpegAudioFile])
         self.samplerate = self._reader.samplerate
         self.duration = self._reader.duration
         self.channels = self._reader.channels
@@ -310,7 +310,7 @@ class FileScanner:
         filter = v >= minProbabilityToStore
         return (f0[filter], v[filter], times[filter])
 
-    def _waitForPendingBlocks(self, maxPendingBlocks=1000, maxPendingFiles=20):
+    def _waitForPendingBlocks(self, maxPendingBlocks=500, maxPendingFiles=50):
         while (
             len(self.pendingBlocks) >= maxPendingBlocks
             or len(self.pendingFiles) >= maxPendingFiles
