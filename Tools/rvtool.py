@@ -58,14 +58,15 @@ class Database:
         """
         params = []
         if args.queryRate is not None:
-            sql += " and files.samplerate = ?"
+            sql += " and samplerate = ?"
             params.append(args.queryRate)
         if args.queryChannels is not None:
-            sql += " and files.channels = ?"
+            sql += " and channels = ?"
             params.append(args.queryChannels)
         if args.queryPath is not None:
-            sql += " and files.path glob ?"
+            sql += " and path glob ?"
             params.append(args.queryPath)
+        sql += " order by path"
         cur = self.con.cursor()
         for row in cur.execute(sql, params):
             yield dict(zip((d[0] for d in cur.description), row))
