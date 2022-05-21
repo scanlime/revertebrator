@@ -19,7 +19,7 @@ import zipfile
 
 class Database:
     def arguments(parser):
-        databaseFile = "rvtool.db"
+        databaseFile = os.path.expanduser("~/.config/rvtool.db")
         parser.add_argument(
             "-f",
             metavar="FILE",
