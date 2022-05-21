@@ -312,10 +312,8 @@ class FileScanner:
 
     def _waitForPendingBlocks(self):
         maxPending = self.args.parallelism * 2
-        while (
-            len(self.pendingBlocks) >= maxPending
-            or len(self.pendingFiles) >= maxPending
-        ):
+        while len(self.pendingBlocks) >= maxPending:
+            assert len(self.pendingFiles) <= maxPending
             self.pendingBlocks = [b for b in self.pendingBlocks if not b.ready()]
             tqdm.tqdm.write(
                 f"Queued blocks: {len(self.pendingBlocks)}, files: {len(self.pendingFiles)}"
