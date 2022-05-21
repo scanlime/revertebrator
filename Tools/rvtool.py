@@ -310,7 +310,7 @@ class FileScanner:
         filter = v >= minProbabilityToStore
         return (f0[filter], v[filter], times[filter])
 
-    def _waitForPendingBlocks(self, maxPendingBlocks=500, maxPendingFiles=50):
+    def _waitForPendingBlocks(self, maxPendingBlocks=200, maxPendingFiles=50):
         while (
             len(self.pendingBlocks) >= maxPendingBlocks
             or len(self.pendingFiles) >= maxPendingFiles
