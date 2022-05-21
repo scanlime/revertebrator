@@ -175,14 +175,7 @@ class BufferedAudioReader:
 
 class FileScanner:
     _ignoreExtensions = (
-        ".jpg",
-        ".png",
-        ".gif",
-        ".txt",
-        ".vtt",
-        ".json",
-        ".description",
-        ".gz",
+        ".jpg .png .gif .txt .vtt .json .description .gz .zip .rvv".split()
     )
 
     def arguments(parser):
