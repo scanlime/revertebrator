@@ -193,7 +193,7 @@ class BufferedAudioReader:
                 self._resamplingWarning = True
                 tqdm.tqdm.write(
                     f"Warning, resampling from {self.samplerate} to {samplerate} for {self.path}"
-                    )
+                )
             samples = self.read(
                 int(np.floor(sampleOffset * self.samplerate / samplerate)),
                 int(np.ceil(numSamples * self.samplerate / samplerate)),
