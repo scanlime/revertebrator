@@ -150,7 +150,6 @@ class BufferedAudioReader:
     def __init__(self, path):
         self.path = path
         self._open()
-        self._resamplingWarning = False
 
     def _open(self):
         try:
@@ -182,42 +181,9 @@ class BufferedAudioReader:
         if self.numSamples < 1:
             raise UnrecoverableAudioError("No samples")
 
-    def readWithFormat(self, sampleOffset, numSamples, samplerate, channels):
+    def readWithChannelCount(self, sampleOffset, numSamples, channels):
         assert channels >= self.channels
-        assert samplerate >= self.samplerate
-
-        if samplerate == self.samplerate:
-            samples = self.read(sampleOffset, numSamples)
-        else:
-            if not self._resamplingWarning:
-                # Could we avoid resampling entirely by storing sample rates per-grain?
-                self._resamplingWarning = True
-                tqdm.tqdm.write(
-                    f"Warning, resampling from {self.samplerate} to {samplerate} for {self.path}"
-                )
-            samples = self.read(
-                int(np.floor(sampleOffset * self.samplerate / samplerate)),
-                int(np.ceil(numSamples * self.samplerate / samplerate)),
-            )
-            samples = np.hstack(
-                [
-                    librosa.util.fix_length(
-                        librosa.resample(
-                            samples[:, i].astype(float),
-                            orig_sr=self.samplerate,
-                            target_sr=samplerate,
-                            fix=False,
-                        ),
-                        size=numSamples,
-                    )[:, np.newaxis]
-                    for i in range(samples.shape[1])
-                ]
-            )
-            samples = np.round(samples * 0.5)
-            assert np.amin(samples) >= -0x8000
-            assert np.amax(samples) <= 0x7FFF
-            samples = samples.astype(np.int16)
-
+        samples = self.read(sampleOffset, numSamples)
         samples = np.pad(samples, ((0, 0), (0, channels - self.channels)), mode="wrap")
         assert samples.shape == (numSamples, channels)
         return samples
@@ -475,7 +441,7 @@ class FilePacker:
         default_min = 3
         default_max = 500
         default_width = 3.0
-        default_mark = 8
+        default_mark = 20
         default_vprob = 0.99
         Database.queryArguments(parser)
         parser.set_defaults(factory=FilePacker)
@@ -539,9 +505,7 @@ class FilePacker:
         self.args = args
         self.db = Database(args)
         self.files = list(self.db.iterFiles(args))
-        self.samplerate = self._singleValuedFileProperty("samplerate")
         self.channels = self._singleValuedFileProperty("channels")
-        self.widthInSamples = int(args.width * self.samplerate)
         self.discontinuityMarker = (
             (pow(-1, np.arange(0, args.mark)) * 0x7FFF)
             .astype(np.int16)
@@ -576,17 +540,18 @@ class FilePacker:
         for i, row in enumerate(self.files):
             features = self.db.pitchFeaturesArray(row["id"])
 
-            igx = (features[:, 0] * self.samplerate).astype(int)
+            igx = np.round(features[:, 0] * row["samplerate"]).astype(int)
             if0 = features[:, 1]
             iv = features[:, 2]
-            iylen = int(self.samplerate * row["duration"])
+            iylen = int(row["samplerate"] * row["duration"])
+            widthInSamples = int(self.args.width * row["samplerate"])
 
             # Discard features that are below the minimum probability
             a = iv >= self.args.vprob
             igx, if0 = igx[a], if0[a]
 
             # Discard grains that would touch the boundaries between inputs
-            a = (igx > self.widthInSamples) & (igx < (iylen - self.widthInSamples - 1))
+            a = (igx > widthInSamples) & (igx < (iylen - widthInSamples - 1))
             if0, igx = if0[a], igx[a]
 
             f0.append(if0)
@@ -646,6 +611,7 @@ class FilePacker:
         # The compact index we have is sorted in f0 order.
         # Figure out a new ordering sorted by input file, and collect those grains
         yygx = np.full(self.cgx.shape, -1)
+        sampleRates = np.zeros(self.cgx.shape, dtype=np.float32)
         ixsort = np.lexsort((self.cgx, self.cii))
         imemo = {}
         writerOffset = 0
@@ -655,9 +621,13 @@ class FilePacker:
                 path = self.files[i]["path"]
                 imemo = dict(i=i, grainEnd=0, reader=BufferedAudioReader(path))
 
+            reader = imemo["reader"]
+            sampleRates[grain] = reader.samplerate
+            widthInSamples = int(self.args.width * reader.samplerate)
+
             # Copy the portion that doesn't overlap what we already copied
-            grainBegin = max(x - self.widthInSamples, imemo["grainEnd"])
-            grainEnd = x + self.widthInSamples
+            grainBegin = max(x - widthInSamples, imemo["grainEnd"])
+            grainEnd = x + widthInSamples
 
             if grainBegin != imemo["grainEnd"] or 0 == imemo["grainEnd"]:
                 # Mark discontinuities between non-adjacent grains, and across input edges
@@ -665,14 +635,11 @@ class FilePacker:
                 writerOffset += len(self.discontinuityMarker)
 
             # Updated locations in the grain index
-            assert self.widthInSamples <= x and x < grainEnd
+            assert widthInSamples <= x and x < grainEnd
             yygx[grain] = writerOffset + x - grainBegin
 
-            grainData = imemo["reader"].readWithFormat(
-                grainBegin,
-                grainEnd - grainBegin,
-                self.samplerate,
-                self.channels,
+            grainData = reader.readWithChannelCount(
+                grainBegin, grainEnd - grainBegin, self.channels
             )
             file.write(grainData)
             writerOffset += grainData.shape[0]
@@ -682,14 +649,17 @@ class FilePacker:
         file.write(self.discontinuityMarker)
         writerOffset += len(self.discontinuityMarker)
 
-        return yygx, {
-            "sound_len": writerOffset,
-            "max_grain_width": self.args.width,
-            "sample_rate": self.samplerate,
-            "channels": self.channels,
-            "bin_x": list(map(int, self.bx)),
-            "bin_f0": list(map(float, self.bf0)),
-        }
+        return (
+            yygx,
+            sampleRates,
+            {
+                "sound_len": writerOffset,
+                "max_grain_width": self.args.width,
+                "channels": self.channels,
+                "bin_x": list(map(int, self.bx)),
+                "bin_f0": list(map(float, self.bf0)),
+            },
+        )
 
     def run(self):
         self._buildCombinedIndex()
@@ -699,12 +669,12 @@ class FilePacker:
                 with soundfile.SoundFile(
                     tmp,
                     "w",
-                    int(self.samplerate),
+                    48000,  # Arbitrary sample rate for FLAC header
                     self.channels,
                     "PCM_16",
                     format="flac",
                 ) as sound:
-                    yygx, index = self._collectAudioData(sound)
+                    yygx, sampleRates, index = self._collectAudioData(sound)
 
                 tmp.seek(0, os.SEEK_END)
                 tmpLen = tmp.tell()
@@ -719,6 +689,12 @@ class FilePacker:
                 z.writestr(
                     zipfile.ZipInfo("grains.u64"),
                     yygx.astype("<u8").tobytes(),
+                    zipfile.ZIP_DEFLATED,
+                    9,
+                )
+                z.writestr(
+                    zipfile.ZipInfo("samplerates.f32"),
+                    sampleRates.astype("<f").tobytes(),
                     zipfile.ZIP_DEFLATED,
                     9,
                 )

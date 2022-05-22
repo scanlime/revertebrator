@@ -140,12 +140,13 @@ public:
   ~GrainIndex() override;
 
   juce::File file;
-  float sampleRate{0}, maxGrainWidth{0};
+  float maxGrainWidth{0};
   juce::int64 numSamples{0};
   juce::Range<juce::int64> soundFileBytes;
   juce::Array<unsigned> binX;
   juce::Array<float> binF0;
   juce::Array<juce::uint64> grainX;
+  juce::Array<float> sampleRates;
   juce::Result status;
   GrainWaveformCache cache;
 
@@ -154,10 +155,6 @@ public:
 
   inline bool isValid() const {
     return status.wasOk() && numBins() && numGrains() && numSamples;
-  }
-
-  inline float maxGrainWidthSamples() const {
-    return sampleRate * maxGrainWidth;
   }
 
   inline unsigned closestBinForPitch(float hz) const {

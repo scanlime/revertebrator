@@ -521,8 +521,7 @@ juce::String GrainIndex::describeToString() const {
   return String(numGrains()) + " grains, " + String(numBins()) + " bins, " +
          String(maxGrainWidth, 1) + " sec, " +
          String(pitchRange().getStart(), 1) + " - " +
-         String(pitchRange().getEnd(), 1) + " Hz, " +
-         numSamplesToString(numSamples) + " @ " + String(sampleRate, 1) + " Hz";
+         String(pitchRange().getEnd(), 1) + " Hz";
 }
 
 juce::Result GrainIndex::load() {
@@ -552,6 +551,15 @@ juce::Result GrainIndex::load() {
       }
     }
   }
+  {
+    auto file = zip.open("samplerates.f32");
+    if (file != nullptr) {
+      juce::BufferedInputStream buf(*file, 8192);
+      while (!buf.isExhausted()) {
+        sampleRates.add(buf.readFloat());
+      }
+    }
+  }
   soundFileBytes = zip.getByteRange("sound.flac");
   if (!json.isObject() || soundFileBytes.isEmpty() || grainX.isEmpty()) {
     return juce::Result::fail("Wrong file format");
@@ -559,9 +567,9 @@ juce::Result GrainIndex::load() {
 
   numSamples = json.getProperty("sound_len", var());
   maxGrainWidth = json.getProperty("max_grain_width", var());
-  sampleRate = json.getProperty("sample_rate", var());
   auto varBinX = json.getProperty("bin_x", var());
   auto varBinF0 = json.getProperty("bin_f0", var());
+
   if (varBinX.isArray()) {
     for (auto x : *varBinX.getArray()) {
       binX.add(juce::int64(x));
@@ -572,9 +580,14 @@ juce::Result GrainIndex::load() {
       binF0.add(f0);
     }
   }
+  while (sampleRates.size() < grainX.size()) {
+    // Old format, one single sample rate instead of an array
+    sampleRates.add(json.getProperty("sample_rate", var()));
+  }
 
-  if (sampleRate < 1 || maxGrainWidthSamples() < 1 || numSamples < 1 ||
-      numGrains() < 1 || numBins() < 1 || varBinX.size() != numBins() + 1) {
+  if (sampleRates.size() != numGrains() || maxGrainWidth <= 0 ||
+      numSamples < 1 || numGrains() < 1 || numBins() < 1 ||
+      varBinX.size() != numBins() + 1) {
     return juce::Result::fail("Bad parameters in file");
   }
   return juce::Result::ok();

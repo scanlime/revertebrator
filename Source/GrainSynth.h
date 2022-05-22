@@ -23,7 +23,7 @@ public:
     float selSpread, pitchSpread, stereoSpread;
     float speedWarp, stereoCenter, gainDbLow, gainDbHigh;
 
-    float speedRatio(const GrainIndex &) const;
+    float speedRatio(const GrainIndex &, unsigned grain) const;
     float maxGrainWidthSamples(const GrainIndex &) const;
     GrainWaveform::Window window(const GrainIndex &) const;
     unsigned grain(const GrainIndex &, float pitch, float sel);

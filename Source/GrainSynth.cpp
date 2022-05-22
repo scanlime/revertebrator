@@ -2,13 +2,14 @@
 
 GrainSequence::~GrainSequence() {}
 
-float GrainSequence::Params::speedRatio(const GrainIndex &index) const {
-  return index.sampleRate / sampleRate * speedWarp;
+float GrainSequence::Params::speedRatio(const GrainIndex &index,
+                                        unsigned grain) const {
+  return index.sampleRates[grain] / sampleRate * speedWarp;
 }
 
 float GrainSequence::Params::maxGrainWidthSamples(
     const GrainIndex &index) const {
-  return index.maxGrainWidthSamples() / speedRatio(index);
+  return index.maxGrainWidth * sampleRate / speedWarp;
 }
 
 GrainWaveform::Window
@@ -70,11 +71,12 @@ TouchGrainSequence::TouchGrainSequence(GrainIndex &index, const Params &params,
 TouchGrainSequence::~TouchGrainSequence() {}
 
 GrainSequence::Point TouchGrainSequence::generate(Rng &rng) {
+  auto grain = params.grain(index, rng, event.pitch, event.sel);
   return Point{
       .waveKey =
           {
-              .grain = params.grain(index, rng, event.pitch, event.sel),
-              .speedRatio = params.speedRatio(index),
+              .grain = grain,
+              .speedRatio = params.speedRatio(index, grain),
               .window = params.window(index),
           },
       .samplesUntilNextPoint = params.samplesUntilNextPoint(rng),
@@ -94,11 +96,12 @@ GrainSequence::Point MidiGrainSequence::generate(Rng &rng) {
   auto pitch = 440.0f * std::pow(2.0f, (event.note + bend - 69.0f) / 12.0f);
   auto sel =
       params.selCenter + params.selMod * (event.modWheel / 128.0f - 0.5f);
+  auto grain = params.common.grain(index, rng, pitch, sel);
   return Point{
       .waveKey =
           {
-              .grain = params.common.grain(index, rng, pitch, sel),
-              .speedRatio = params.common.speedRatio(index),
+              .grain = grain,
+              .speedRatio = params.common.speedRatio(index, grain),
               .window = params.common.window(index),
           },
       .samplesUntilNextPoint = params.common.samplesUntilNextPoint(rng),
