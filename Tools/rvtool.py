@@ -190,6 +190,7 @@ class BufferedAudioReader:
             samples = self.read(sampleOffset, numSamples)
         else:
             if not self._resamplingWarning:
+                # Could we avoid resampling entirely by storing sample rates per-grain?
                 self._resamplingWarning = True
                 tqdm.tqdm.write(
                     f"Warning, resampling from {self.samplerate} to {samplerate} for {self.path}"
