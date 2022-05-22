@@ -347,17 +347,6 @@ void GrainVoice::fetchQueueWaveforms(GrainSound &sound) {
   }
 }
 
-static inline bool timestampForNextRepeat(int &timestamp, double rate) {
-  constexpr int maxIntervalToConsider = 1 << 22;
-  const double minRateToConsider = 1. / maxIntervalToConsider;
-  if (rate > minRateToConsider) {
-    timestamp += int(std::ceil(1. / rate));
-    return true;
-  } else {
-    return false;
-  }
-}
-
 int GrainVoice::numActiveGrainsInQueue() {
   int queueTimestamp = 0;
   int numActive = 0;
