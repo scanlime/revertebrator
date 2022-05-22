@@ -181,7 +181,7 @@ class BufferedAudioReader:
         if self.numSamples < 1:
             raise UnrecoverableAudioError("No samples")
 
-    def readWithChannelCount(self, sampleOffset, numSamples, channels):
+    def readWithExactShape(self, sampleOffset, numSamples, channels):
         assert channels >= self.channels
         samples = self.read(sampleOffset, numSamples)
         samples = np.pad(samples, ((0, 0), (0, channels - self.channels)), mode="wrap")
@@ -641,7 +641,7 @@ class FilePacker:
             assert widthInSamples <= x and x < grainEnd
             yygx[grain] = writerOffset + x - grainBegin
 
-            grainData = reader.readWithChannelCount(
+            grainData = reader.readWithExactShape(
                 grainBegin, grainEnd - grainBegin, self.channels
             )
             file.write(grainData)
