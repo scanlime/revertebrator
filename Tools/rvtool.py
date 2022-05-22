@@ -36,19 +36,21 @@ class Database:
             "-r",
             metavar="HZ",
             dest="queryRate",
-            help=f"select files of a specified sample rate only",
+            action="append",
+            help=f"select files of this sample rate [all sample rates]",
         )
         parser.add_argument(
             "-c",
             metavar="N",
             dest="queryChannels",
-            help=f"select files of a specified channel count only",
+            action="append",
+            help=f"select files of this channel count [all channel counts]",
         )
         parser.add_argument(
-            "-p",
+            "queryPath",
             metavar="GLOB",
-            dest="queryPath",
-            help=f"select file paths that match a glob pattern",
+            nargs="*",
+            help=f"select file paths that match a glob pattern [all paths]",
         )
         parser.add_argument(
             "-s",
@@ -71,19 +73,21 @@ class Database:
                 (select count(pitch_features.time)
                 from pitch_features where files.id == pitch_features.file)
                     as numPitchFeatures
-            from files where ({args.queryFilter})
+            from files where ( ({args.queryFilter})
         """
         params = []
-        if args.queryRate is not None:
-            sql += " and samplerate = ?"
-            params.append(args.queryRate)
-        if args.queryChannels is not None:
-            sql += " and channels = ?"
-            params.append(args.queryChannels)
-        if args.queryPath is not None:
-            sql += " and path glob ?"
-            params.append(args.queryPath)
-        sql += " order by " + args.queryOrder
+
+        if args.queryRate:
+            sql += f"and ({' or '.join('samplerate = ?' for _ in args.queryRate)})"
+            params.extend(map(float, args.queryRate))
+        if args.queryChannels:
+            sql += f"and ({' or '.join('channels = ?' for _ in args.queryChannels)})"
+            params.extend(map(int, args.queryChannels))
+        if args.queryPath and args.queryPath[0]:
+            sql += f"and ({' or '.join('path glob ?' for _ in args.queryPath)})"
+            params.extend(args.queryPath)
+        sql += f") order by {args.queryOrder}"
+
         cur = self.con.cursor()
         for row in cur.execute(sql, params):
             yield dict(zip((d[0] for d in cur.description), row))
