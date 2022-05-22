@@ -577,7 +577,7 @@ class FilePacker:
         else:
             choice = values[-1]
             tqdm.tqdm.write(
-                f"Warning, inputs have inconsistent values for {column}, {values}. Choosing {choice}"
+                f"Inputs have multiple values for {column}, {values}. Choosing {choice}"
             )
             return choice
 
