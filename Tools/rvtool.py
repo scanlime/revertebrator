@@ -152,8 +152,12 @@ class BufferedAudioReader:
         self._open()
 
     def _open(self):
-        tqdm.tqdm.write(f"Reading {self.path}")
-        self._reader = audioread.audio_open(self.path)
+        try:
+            tqdm.tqdm.write(f"Reading {self.path}")
+            self._reader = audioread.audio_open(self.path)
+        except (EOFError, audioread.exceptions.NoBackendError) as e:
+            raise UnrecoverableAudioError(e)
+
         self.samplerate = self._reader.samplerate
         self.duration = self._reader.duration
         self.channels = self._reader.channels
@@ -161,6 +165,13 @@ class BufferedAudioReader:
         self._buffer = [np.zeros((0, self.channels), dtype=np.int16)]
         self._begin = 0
         self._end = 0
+
+        if self.samplerate < 1:
+            raise UnrecoverableAudioError("No samplerate")
+        if self.channels < 1:
+            raise UnrecoverableAudioError("No channels")
+        if self.numSamples < 1:
+            raise UnrecoverableAudioError("No samples")
 
     def read(self, sampleOffset, numSamples, retries=4):
         # audioread can fail intermittently due to timeouts in its ffmpeg
@@ -171,7 +182,6 @@ class BufferedAudioReader:
             except (
                 BackwardSeek,
                 EOFError,
-                audioread.exceptions.NoBackendError,
                 audioread.ffdec.ReadTimeoutError,
             ) as e:
                 if retries > 0:
@@ -203,9 +213,7 @@ class BufferedAudioReader:
 
 
 class FileScanner:
-    _ignoreExtensions = (
-        ".jpg .png .gif .txt .vtt .json .description .gz .zip .rvv".split()
-    )
+    _ignoreExtensions = ".jpg .png .gif .txt .vtt .json .description .gz .zip .rvv .py .pyc .pyo .npz".split()
 
     def arguments(parser):
         parallelism = os.cpu_count()
@@ -316,7 +324,7 @@ class FileScanner:
             try:
                 self._readAudio(BufferedAudioReader(path))
             except UnrecoverableAudioError as e:
-                tqdm.tqdm.write(f"Giving up on {path} because of error, {e}")
+                tqdm.tqdm.write(f"Giving up on {path} because of error, {e.args}")
 
     def _enqueueBlock(self, sampleRate, sampleOffset, i16Samples):
         # Do the mixdown to mono and the int to float conversion as we copy
