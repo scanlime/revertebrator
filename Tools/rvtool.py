@@ -185,7 +185,10 @@ class BufferedAudioReader:
         assert channels >= self.channels
         samples = self.read(sampleOffset, numSamples)
         samples = np.pad(samples, ((0, 0), (0, channels - self.channels)), mode="wrap")
-        assert samples.shape == (numSamples, channels)
+        if samples.shape != (numSamples, channels):
+            raise IOError(
+                f"Trying to read {self.path} at {sampleOffset}, {numSamples}, {channels}. result shape: {samples.shape}"
+            )
         return samples
 
     def read(self, sampleOffset, numSamples, retries=4):
