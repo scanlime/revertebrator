@@ -522,7 +522,7 @@ juce::String GrainIndex::describeToString() const {
          String(maxGrainWidth, 1) + " sec, " +
          String(pitchRange().getStart(), 1) + " - " +
          String(pitchRange().getEnd(), 1) + " Hz, " +
-         numSamplesToString(numSamples);
+         numSamplesToString(numSamples) + " @ " + String(sampleRate, 1) + " Hz";
 }
 
 juce::Result GrainIndex::load() {
