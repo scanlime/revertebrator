@@ -154,13 +154,20 @@ class BufferedAudioReader:
     def _open(self):
         try:
             tqdm.tqdm.write(f"Reading {self.path}")
-            self._reader = audioread.audio_open(self.path)
-        except (EOFError, audioread.exceptions.NoBackendError) as e:
+            self._file = audioread.ffdec.FFmpegAudioFile(
+                self.path, block_size=64 * 1024
+            )
+            self._reader = self._file.read_data(timeout=10.0)
+        except (
+            EOFError,
+            audioread.exceptions.NoBackendError,
+            audioread.ffdec.UnsupportedError,
+        ) as e:
             raise UnrecoverableAudioError(e)
 
-        self.samplerate = self._reader.samplerate
-        self.duration = self._reader.duration
-        self.channels = self._reader.channels
+        self.samplerate = self._file.samplerate
+        self.duration = self._file.duration
+        self.channels = self._file.channels
         self.numSamples = int(self.samplerate * self.duration)
         self._buffer = [np.zeros((0, self.channels), dtype=np.int16)]
         self._begin = 0
@@ -174,14 +181,13 @@ class BufferedAudioReader:
             raise UnrecoverableAudioError("No samples")
 
     def read(self, sampleOffset, numSamples, retries=4):
-        # audioread can fail intermittently due to timeouts in its ffmpeg
-        # backend.. allow a few retries by reopening the reader.
+        # audioread can fail intermittently, allow a few retries by reopening
         while True:
             try:
                 return self._readInternal(sampleOffset, numSamples)
             except (
-                BackwardSeek,
                 EOFError,
+                BackwardSeek,
                 audioread.ffdec.ReadTimeoutError,
             ) as e:
                 if retries > 0:
