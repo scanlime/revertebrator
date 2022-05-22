@@ -554,7 +554,7 @@ class FilePacker:
             igx, if0 = igx[a], if0[a]
 
             # Discard grains that would touch the boundaries between inputs
-            a = (igx > widthInSamples) & (igx < (iylen - widthInSamples - 1))
+            a = (igx > widthInSamples) and (igx < (iylen - widthInSamples - 1))
             if0, igx = if0[a], igx[a]
 
             f0.append(if0)
