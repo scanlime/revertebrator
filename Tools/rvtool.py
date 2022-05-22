@@ -137,6 +137,17 @@ class Database:
         cur.execute("commit")
         tqdm.tqdm.write(f"Finished {audio.path}")
 
+    def forgetPaths(self, paths):
+        cur = self.con.cursor()
+        cur.execute("begin")
+        for path in paths:
+            cur.execute("select id from files where path = ?", (path,))
+            fileId = cur.fetchone()[0]
+            cur.execute("delete from pitch_features where file = ?", (fileId,))
+            cur.execute("delete from files where id = ?", (fileId,))
+        cur.execute("commit")
+        tqdm.tqdm.write(f"Forgot paths: {len(paths)}")
+
 
 class UnrecoverableAudioError(Exception):
     pass
@@ -437,6 +448,38 @@ class FileListing:
             )
 
 
+class FileForget:
+    def arguments(parser):
+        Database.queryArguments(parser)
+        parser.set_defaults(factory=FileForget)
+        parser.add_argument(
+            "--missing",
+            dest="forgetMissing",
+            action="store_true",
+            help="only operate on records for files that are missing",
+        )
+        parser.add_argument(
+            "--forget",
+            dest="forgetConfirm",
+            action="store_true",
+            help=f"actually forget; without this option, lists what would be removed",
+        )
+
+    def __init__(self, args):
+        self.db = Database(args)
+        self.args = args
+
+    def run(self):
+        paths = []
+        for row in self.db.iterFiles(self.args):
+            if not self.args.forgetMissing or not os.path.exists(row["path"]):
+                paths.append(row["path"])
+        if self.args.forgetConfirm:
+            self.db.forgetPaths(paths)
+        else:
+            tqdm.tqdm.write(f"Add --forget to confirm forgetting paths: {len(paths)}")
+
+
 class FilePacker:
     def arguments(parser):
         default_output = time.strftime("voice-%Y%m%d%H%M%S.rvv")
@@ -723,6 +766,12 @@ def main():
         subparsers.add_parser(
             "scan",
             description="Run pitch detection on batches of audio files, updating the feature database",
+        )
+    )
+    FileForget.arguments(
+        subparsers.add_parser(
+            "forget",
+            description="Remove records from the audio feature database",
         )
     )
     FileListing.arguments(
