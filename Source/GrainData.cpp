@@ -521,7 +521,8 @@ juce::String GrainIndex::describeToString() const {
   return String(numGrains()) + " grains, " + String(numBins()) + " bins, " +
          String(maxGrainWidth, 1) + " sec, " +
          String(pitchRange().getStart(), 1) + " - " +
-         String(pitchRange().getEnd(), 1) + " Hz";
+         String(pitchRange().getEnd(), 1) + " Hz, " +
+         numSamplesToString(numSamples);
 }
 
 juce::Result GrainIndex::load() {
