@@ -150,6 +150,7 @@ class BufferedAudioReader:
     def __init__(self, path):
         self.path = path
         self._open()
+        self._resamplingWarning = False
 
     def _open(self):
         try:
@@ -188,9 +189,11 @@ class BufferedAudioReader:
         if samplerate == self.samplerate:
             samples = self.read(sampleOffset, numSamples)
         else:
-            tqdm.tqdm.write(
-                f"Warning, resampling from {self.samplerate} to {samplerate} for {self.path}"
-            )
+            if not self._resamplingWarning:
+                self._resamplingWarning = True
+                tqdm.tqdm.write(
+                    f"Warning, resampling from {self.samplerate} to {samplerate} for {self.path}"
+                    )
             samples = self.read(
                 int(np.floor(sampleOffset * self.samplerate / samplerate)),
                 int(np.ceil(numSamples * self.samplerate / samplerate)),
@@ -209,7 +212,7 @@ class BufferedAudioReader:
                     for i in range(samples.shape[1])
                 ]
             )
-            samples = np.round(samples)
+            samples = np.round(samples * 0.5)
             assert np.amin(samples) >= -0x8000
             assert np.amax(samples) <= 0x7FFF
             samples = samples.astype(np.int16)
