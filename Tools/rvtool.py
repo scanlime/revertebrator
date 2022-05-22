@@ -138,11 +138,22 @@ class Database:
         tqdm.tqdm.write(f"Finished {audio.path}")
 
 
+class UnrecoverableAudioError(Exception):
+    pass
+
+
+class BackwardSeek(Exception):
+    pass
+
+
 class BufferedAudioReader:
     def __init__(self, path):
-        tqdm.tqdm.write(f"Reading {path}")
         self.path = path
-        self._reader = audioread.audio_open(path)
+        self._open()
+
+    def _open(self):
+        tqdm.tqdm.write(f"Reading {self.path}")
+        self._reader = audioread.audio_open(self.path)
         self.samplerate = self._reader.samplerate
         self.duration = self._reader.duration
         self.channels = self._reader.channels
@@ -151,9 +162,27 @@ class BufferedAudioReader:
         self._begin = 0
         self._end = 0
 
-    def read(self, sampleOffset, numSamples):
+    def read(self, sampleOffset, numSamples, retries=4):
+        # audioread can fail intermittently due to timeouts in its ffmpeg
+        # backend.. allow a few retries by reopening the reader.
+        while True:
+            try:
+                return self._readInternal(sampleOffset, numSamples)
+            except (
+                BackwardSeek,
+                EOFError,
+                audioread.exceptions.NoBackendError,
+                audioread.ffdec.ReadTimeoutError,
+            ) as e:
+                if retries > 0:
+                    self._open()
+                    retries -= 1
+                else:
+                    raise UnrecoverableAudioError(e)
+
+    def _readInternal(self, sampleOffset, numSamples):
         if sampleOffset < self._begin:
-            raise ValueError("Buffered audio reader can't seek backwards")
+            raise BackwardSeek()
 
         for chunk in self._reader:
             chunk = np.ndarray(
@@ -286,11 +315,7 @@ class FileScanner:
         if not self.db.hasFile(path):
             try:
                 self._readAudio(BufferedAudioReader(path))
-            except (
-                EOFError,
-                audioread.exceptions.NoBackendError,
-                audioread.ffdec.ReadTimeoutError,
-            ) as e:
+            except UnrecoverableAudioError as e:
                 tqdm.tqdm.write(f"Giving up on {path} because of error, {e}")
 
     def _enqueueBlock(self, sampleRate, sampleOffset, i16Samples):
