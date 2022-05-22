@@ -162,6 +162,7 @@ class BufferedAudioReader:
             EOFError,
             audioread.exceptions.NoBackendError,
             audioread.ffdec.UnsupportedError,
+            audioread.ffdec.CommunicationError,
         ) as e:
             raise UnrecoverableAudioError(e)
 
@@ -179,6 +180,43 @@ class BufferedAudioReader:
             raise UnrecoverableAudioError("No channels")
         if self.numSamples < 1:
             raise UnrecoverableAudioError("No samples")
+
+    def readWithFormat(self, sampleOffset, numSamples, samplerate, channels):
+        assert channels >= self.channels
+        assert samplerate >= self.samplerate
+
+        if samplerate == self.samplerate:
+            samples = self.read(sampleOffset, numSamples)
+        else:
+            tqdm.tqdm.write(
+                f"Warning, resampling from {self.samplerate} to {samplerate} for {self.path}"
+            )
+            samples = self.read(
+                int(np.floor(sampleOffset * self.samplerate / samplerate)),
+                int(np.ceil(numSamples * self.samplerate / samplerate)),
+            )
+            samples = np.hstack(
+                [
+                    librosa.util.fix_length(
+                        librosa.resample(
+                            samples[:, i].astype(float),
+                            orig_sr=self.samplerate,
+                            target_sr=samplerate,
+                            fix=False,
+                        ),
+                        size=numSamples,
+                    )[:, np.newaxis]
+                    for i in range(samples.shape[1])
+                ]
+            )
+            samples = np.round(samples)
+            assert np.amin(samples) >= -0x8000
+            assert np.amax(samples) <= 0x7FFF
+            samples = samples.astype(np.int16)
+
+        samples = np.pad(samples, ((0, 0), (0, channels - self.channels)), mode="wrap")
+        assert samples.shape == (numSamples, channels)
+        return samples
 
     def read(self, sampleOffset, numSamples, retries=4):
         # audioread can fail intermittently, allow a few retries by reopening
@@ -516,16 +554,22 @@ class FilePacker:
         values = set()
         for row in self.files:
             values.add(row[column])
+        values = list(values)
+        values.sort()
         if len(values) == 0:
             raise ValueError("No input files selected")
-        elif len(values) != 1:
-            raise ValueError(f"Inputs have inconsistent values for {column}, {values}")
-        return values.pop()
+        elif len(values) == 1:
+            return values[0]
+        else:
+            choice = values[-1]
+            tqdm.tqdm.write(
+                f"Warning, inputs have inconsistent values for {column}, {values}. Choosing {choice}"
+            )
+            return choice
 
     def _buildCombinedIndex(self):
         f0, gx, ii = [], [], []
         for i, row in enumerate(self.files):
-            assert self.samplerate == row["samplerate"]
             features = self.db.pitchFeaturesArray(row["id"])
 
             igx = (features[:, 0] * self.samplerate).astype(int)
@@ -620,7 +664,12 @@ class FilePacker:
             assert self.widthInSamples <= x and x < grainEnd
             yygx[grain] = writerOffset + x - grainBegin
 
-            grainData = imemo["reader"].read(grainBegin, grainEnd - grainBegin)
+            grainData = imemo["reader"].readWithFormat(
+                grainBegin,
+                grainEnd - grainBegin,
+                self.samplerate,
+                self.channels,
+            )
             file.write(grainData)
             writerOffset += grainData.shape[0]
             imemo["grainEnd"] = grainEnd
