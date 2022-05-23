@@ -382,7 +382,7 @@ class FileScanner:
         numSamples = shm.size // 8
         samples = np.ndarray(numSamples, dtype=float, buffer=shm.buf)
         resampled = librosa.resample(
-            samples, orig_sr=sampleRate, target_sr=analysisRate
+            samples, orig_sr=sampleRate, target_sr=analysisRate, res_type="kaiser_fast"
         )
         shm.unlink()
 
