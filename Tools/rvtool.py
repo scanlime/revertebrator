@@ -249,7 +249,7 @@ class FileScanner:
 
     def arguments(parser):
         parallelism = os.cpu_count()
-        secondsPerBlock = 8
+        secondsPerBlock = 16
         secondsOverlap = 1
         freqMinHz = librosa.note_to_hz("C1")
         freqMaxHz = librosa.note_to_hz("C6")
