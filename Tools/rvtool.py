@@ -399,18 +399,14 @@ class FileScanner:
         return (f0[filter], v[filter], times[filter])
 
     def _waitForPendingBlocks(self):
-        maxPending = self.args.parallelism * 5
+        maxPending = self.args.parallelism * 4
         while len(self.pendingBlocks) >= maxPending:
             assert len(self.pendingFiles) <= maxPending
             self.pendingBlocks = [b for b in self.pendingBlocks if not b.ready()]
-            tqdm.tqdm.write(
-                f"Queued blocks: {len(self.pendingBlocks)}, files: {len(self.pendingFiles)}"
-            )
-            time.sleep(20)
+            time.sleep(5)
             self._storeCompletedFiles()
 
     def _storeCompletedFiles(self):
-        self._waitForPendingBlocks()
         while self.pendingFiles:
             audio, blocks = self.pendingFiles[0]
             for block in blocks:
