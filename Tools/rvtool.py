@@ -261,7 +261,7 @@ class FileScanner:
             dest="parallelism",
             type=int,
             default=parallelism,
-            help="number of parallel jobs to run [{parallelism}]",
+            help=f"number of parallel jobs to run [{parallelism}]",
         )
         parser.add_argument(
             "--block-size",
@@ -269,7 +269,7 @@ class FileScanner:
             dest="secondsPerBlock",
             type=float,
             default=secondsPerBlock,
-            help="length of audio blocks to process, in seconds [{secondsPerBlock}]",
+            help=f"length of audio blocks to process, in seconds [{secondsPerBlock}]",
         )
         parser.add_argument(
             "--block-overlap",
@@ -277,7 +277,7 @@ class FileScanner:
             dest="secondsOverlap",
             type=float,
             default=secondsOverlap,
-            help="amount of overlap between audio blocks, in seconds [{secondsOverlap}]",
+            help=f"amount of overlap between audio blocks, in seconds [{secondsOverlap}]",
         )
         parser.add_argument(
             "--fmin",
