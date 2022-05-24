@@ -361,10 +361,9 @@ class FileScanner:
         # Do the mixdown to mono and the int to float conversion as we copy
         # from the audioread output buffer to a shared memory buffer
         numSamples = i16Samples.shape[0]
-        shm = self.manager.SharedMemory(numSamples * 8)
-        shmArray = np.ndarray((numSamples,), dtype=float, buffer=shm.buf)
-        np.sum(i16Samples, dtype=float, out=shmArray, axis=-1)
-        shmArray *= 1 / 0x7FFF
+        shm = self.manager.SharedMemory(numSamples * 4)
+        shmArray = np.ndarray((numSamples,), dtype=np.float32, buffer=shm.buf)
+        np.sum(i16Samples, dtype=np.float32, out=shmArray, axis=-1)
         block = self.pool.apply_async(
             self.__class__._blockWorker, (self.args, sampleRate, sampleOffset, shm)
         )
@@ -379,8 +378,8 @@ class FileScanner:
         if hasattr(os, "nice") and os.nice(0) < niceness:
             os.nice(niceness)
 
-        numSamples = shm.size // 8
-        samples = np.ndarray(numSamples, dtype=float, buffer=shm.buf)
+        numSamples = shm.size // 4
+        samples = np.ndarray(numSamples, dtype=np.float32, buffer=shm.buf)
         resampled = librosa.resample(
             samples, orig_sr=sampleRate, target_sr=analysisRate, res_type="kaiser_fast"
         )
