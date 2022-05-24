@@ -422,9 +422,10 @@ class FileScanner:
         blocks = []
         for x in range(0, audio.numSamples, samplesBetweenBlocks):
             self._waitForPendingBlocks()
-            blocks.append(
-                self._enqueueBlock(audio.samplerate, x, audio.read(x, samplesPerBlock))
-            )
+            b = audio.read(x, samplesPerBlock)
+            if len(b) < 1:
+                break
+            blocks.append(self._enqueueBlock(audio.samplerate, x, b))
         self.pendingFiles.append((audio, blocks))
 
 
