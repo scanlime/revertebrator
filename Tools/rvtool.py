@@ -353,13 +353,17 @@ class FileScanner:
     def _visitInputs(self):
         files = set()
         for input in tqdm.tqdm(self.args.inputs, unit="input"):
-            for (dirpath, dirnames, filenames) in os.walk(input):
-                for filename in filenames:
-                    if (
-                        not filename.startswith(".")
-                        and not os.path.splitext(filename)[1] in self._ignoreExtensions
-                    ):
-                        files.add(os.path.realpath(os.path.join(dirpath, filename)))
+            if os.path.isfile(input):
+                files.add(os.path.realpath(input))
+            else:
+                for (dirpath, dirnames, filenames) in os.walk(input):
+                    for filename in filenames:
+                        if (
+                            not filename.startswith(".")
+                            and not os.path.splitext(filename)[1]
+                            in self._ignoreExtensions
+                        ):
+                            files.add(os.path.realpath(os.path.join(dirpath, filename)))
         files = list(files)
         random.shuffle(files)
         for path in tqdm.tqdm(files, unit="file"):
