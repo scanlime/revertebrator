@@ -486,7 +486,7 @@ class FilePacker:
         default_output = time.strftime("voice-%Y%m%d%H%M%S.rvv")
         default_res = 0.01
         default_min = 3
-        default_max = 500
+        default_max = 1000
         default_width = 3.0
         default_mark = 20
         default_vprob = 0.99
