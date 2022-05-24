@@ -245,7 +245,23 @@ class BufferedAudioReader:
 
 
 class FileScanner:
-    _ignoreExtensions = ".jpg .png .gif .txt .vtt .json .description .gz .zip .rvv .py .pyc .pyo .npz".split()
+    _ignoreExtensions = [
+        ".description",
+        ".gif",
+        ".gz",
+        ".jpg",
+        ".json",
+        ".npz",
+        ".png",
+        ".py",
+        ".pyc",
+        ".pyo",
+        ".rvv",
+        ".sfz",
+        ".txt",
+        ".vtt",
+        ".zip",
+    ]
 
     def arguments(parser):
         parallelism = os.cpu_count()
