@@ -842,6 +842,7 @@ class JsonExport:
     def run(self):
         for info in self.db.iterFiles(self.args):
             self.db.retrieveFileDetails(info)
+            del info["id"]
             json.dump(info, self.output)
             self.output.write("\n")
 
