@@ -102,7 +102,28 @@ class Database:
         return np.asarray(cur.fetchall()).reshape((-1, 3))
 
     def __init__(self, args):
-        self.con = sqlite3.connect(args.databaseFile)
+        self.filename = args.databaseFile
+        self._open()
+
+    def _retryable(func):
+        def fn(*args, **kw):
+            retries = 20
+            while True:
+                try:
+                    return func(*args, **kw)
+                except sqlite3.OperationalError as e:
+                    if retries > 0:
+                        retries -= 1
+                        tqdm.tqdm.write("Retrying database access")
+                        time.sleep(1)
+                    else:
+                        raise e
+
+        return fn
+
+    @_retryable
+    def _open(self):
+        self.con = sqlite3.connect(self.filename)
         self.con.executescript(
             """
             create table if not exists files
@@ -116,11 +137,13 @@ class Database:
         """
         )
 
+    @_retryable
     def hasFile(self, path):
         cur = self.con.cursor()
         cur.execute("select count(id) from files where path = ?", (path,))
         return cur.fetchone()[0] == 1
 
+    @_retryable
     def storeFile(self, audio, blocks):
         cur = self.con.cursor()
         cur.execute("begin")
@@ -141,6 +164,7 @@ class Database:
         cur.execute("commit")
         tqdm.tqdm.write(f"Finished {audio.path}")
 
+    @_retryable
     def forgetPaths(self, paths):
         cur = self.con.cursor()
         cur.execute("begin")
