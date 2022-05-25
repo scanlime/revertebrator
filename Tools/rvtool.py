@@ -12,6 +12,7 @@ import queue
 import random
 import soundfile
 import sqlite3
+import sys
 import tempfile
 import time
 import tqdm
@@ -92,7 +93,10 @@ class Database:
         for row in cur.execute(sql, params):
             yield dict(zip((d[0] for d in cur.description), row))
 
-    def pitchFeaturesArray(self, fileId):
+    def retrieveFileDetails(self, info):
+        info["pitchFeatures"] = self.pitchFeatures(info["id"]).tolist()
+
+    def pitchFeatures(self, fileId):
         cur = self.con.cursor()
         cur.execute(
             "select time, f0, probability from pitch_features "
@@ -144,25 +148,20 @@ class Database:
         return cur.fetchone()[0] == 1
 
     @_retryable
-    def storeFile(self, audio, blocks):
+    def storeFile(self, info):
         cur = self.con.cursor()
         cur.execute("begin")
         cur.execute(
             "insert into files(path, samplerate, channels, duration) values (?,?,?,?)",
-            (audio.path, audio.samplerate, audio.channels, audio.duration),
+            (info["path"], info["samplerate"], info["channels"], info["duration"]),
         )
-        fileId = cur.lastrowid
-        rows = []
-        for (f0, v, times) in blocks:
-            assert len(f0) == len(v)
-            assert len(f0) == len(times)
-            rows.extend((fileId, f0[i], v[i], times[i]) for i in range(len(f0)))
+        info["id"] = cur.lastrowid
         cur.executemany(
             "insert into pitch_features(file, f0, probability, time) values (?,?,?,?)",
-            rows,
+            [(info["id"], f0, v, t) for (t, f0, v) in info["pitchFeatures"]],
         )
         cur.execute("commit")
-        tqdm.tqdm.write(f"Finished {audio.path}")
+        tqdm.tqdm.write(f"Finished {info['path']}")
 
     @_retryable
     def forgetPaths(self, paths):
@@ -174,7 +173,6 @@ class Database:
             cur.execute("delete from pitch_features where file = ?", (fileId,))
             cur.execute("delete from files where id = ?", (fileId,))
         cur.execute("commit")
-        tqdm.tqdm.write(f"Forgot paths: {len(paths)}")
 
 
 class UnrecoverableAudioError(Exception):
@@ -439,7 +437,18 @@ class FileScanner:
         )
         times = librosa.times_like(f0, sr=analysisRate) + (sampleOffset / sampleRate)
         filter = v >= minProbabilityToStore
-        return (f0[filter], v[filter], times[filter])
+        return (times[filter], f0[filter], v[filter])
+
+    def _pitchFeaturesFromBlocks(self, blocks):
+        combined = []
+        for block in blocks:
+            (times, f0, v) = block.get()
+            assert len(times) == len(f0)
+            assert len(times) == len(v)
+            for i in range(len(times)):
+                combined.append((times[i], f0[i], v[i]))
+        combined.sort()
+        return combined
 
     def _waitForPendingBlocks(self):
         maxPending = self.args.parallelism * 4
@@ -454,7 +463,15 @@ class FileScanner:
             for block in blocks:
                 if not block.ready():
                     return
-            self.db.storeFile(audio, [b.get() for b in blocks])
+            self.db.storeFile(
+                dict(
+                    path=audio.path,
+                    samplerate=audio.samplerate,
+                    channels=audio.channels,
+                    duration=audio.duration,
+                    pitchFeatures=self._pitchFeaturesFromBlocks(blocks),
+                )
+            )
             del self.pendingFiles[0]
 
     def _readAudio(self, audio):
@@ -520,6 +537,7 @@ class FileForget:
                 paths.append(row["path"])
         if self.args.forgetConfirm:
             self.db.forgetPaths(paths)
+            tqdm.tqdm.write(f"Forgot paths: {len(paths)}")
         else:
             tqdm.tqdm.write(f"Add --forget to confirm forgetting paths: {len(paths)}")
 
@@ -628,7 +646,7 @@ class FilePacker:
     def _buildCombinedIndex(self):
         f0, gx, ii = [], [], []
         for i, row in enumerate(self.files):
-            features = self.db.pitchFeaturesArray(row["id"])
+            features = self.db.pitchFeatures(row["id"])
 
             igx = np.round(features[:, 0] * row["samplerate"]).astype(int)
             if0 = features[:, 1]
@@ -802,6 +820,63 @@ class FilePacker:
         tqdm.tqdm.write(f"Completed {self.filename}")
 
 
+class JsonExport:
+    def arguments(parser):
+        Database.queryArguments(parser)
+        parser.add_argument(
+            "-o",
+            metavar="DEST",
+            dest="output",
+            help=f"write output to a file [stdout]",
+        )
+        parser.set_defaults(factory=JsonExport)
+
+    def __init__(self, args):
+        self.db = Database(args)
+        self.args = args
+        if args.output:
+            self.output = open(args.output, "x")
+        else:
+            self.output = sys.stdout
+
+    def run(self):
+        for info in self.db.iterFiles(self.args):
+            self.db.retrieveFileDetails(info)
+            json.dump(info, self.output)
+            self.output.write("\n")
+
+
+class JsonImport:
+    def arguments(parser):
+        parser.add_argument(
+            "inputs",
+            metavar="SRC",
+            nargs="+",
+            help="files to import JSON records from",
+        )
+        parser.add_argument(
+            "--replace",
+            action="store_true",
+            help="delete existing records for the same file paths before importing",
+        )
+        parser.set_defaults(factory=JsonImport)
+
+    def __init__(self, args):
+        self.db = Database(args)
+        self.args = args
+
+    def run(self):
+        for input in self.args.inputs:
+            with open(input) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        info = json.loads(line)
+                        if self.args.replace:
+                            self.db.forgetPaths([info["path"]])
+                        self.db.storeFile(info)
+
+
 def main():
     parser = argparse.ArgumentParser()
     Database.arguments(parser)
@@ -828,6 +903,18 @@ def main():
         subparsers.add_parser(
             "pack",
             description="Compact a portion of the feature database into a self-contained archive",
+        )
+    )
+    JsonExport.arguments(
+        subparsers.add_parser(
+            "export",
+            description="Export database information to JSON",
+        )
+    )
+    JsonImport.arguments(
+        subparsers.add_parser(
+            "import",
+            description="Import database information from JSON",
         )
     )
     args = parser.parse_args()
