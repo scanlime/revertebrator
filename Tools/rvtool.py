@@ -169,9 +169,10 @@ class Database:
         cur.execute("begin")
         for path in paths:
             cur.execute("select id from files where path = ?", (path,))
-            fileId = cur.fetchone()[0]
-            cur.execute("delete from pitch_features where file = ?", (fileId,))
-            cur.execute("delete from files where id = ?", (fileId,))
+            row = cur.fetchone()
+            if row:
+                cur.execute("delete from pitch_features where file = ?", (row[0],))
+                cur.execute("delete from files where id = ?", (row[0],))
         cur.execute("commit")
 
 
