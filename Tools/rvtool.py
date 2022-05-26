@@ -205,9 +205,7 @@ class BufferedAudioReader:
             raise UnrecoverableAudioError(e)
 
         self.samplerate = self._file.samplerate
-        self.duration = self._file.duration
         self.channels = self._file.channels
-        self.numSamples = int(self.samplerate * self.duration)
         self._buffer = [np.zeros((0, self.channels), dtype=np.int16)]
         self._begin = 0
         self._end = 0
@@ -216,8 +214,6 @@ class BufferedAudioReader:
             raise UnrecoverableAudioError("No samplerate")
         if self.channels < 1:
             raise UnrecoverableAudioError("No channels")
-        if self.numSamples < 1:
-            raise UnrecoverableAudioError("No samples")
 
     def readWithExactShape(self, sampleOffset, numSamples, channels):
         assert channels >= self.channels
@@ -460,19 +456,12 @@ class FileScanner:
 
     def _storeCompletedFiles(self):
         while self.pendingFiles:
-            audio, blocks = self.pendingFiles[0]
+            info, blocks = self.pendingFiles[0]
             for block in blocks:
                 if not block.ready():
                     return
-            self.db.storeFile(
-                dict(
-                    path=audio.path,
-                    samplerate=audio.samplerate,
-                    channels=audio.channels,
-                    duration=audio.duration,
-                    pitchFeatures=self._pitchFeaturesFromBlocks(blocks),
-                )
-            )
+            info["pitchFeatures"] = self._pitchFeaturesFromBlocks(blocks)
+            self.db.storeFile(info)
             del self.pendingFiles[0]
 
     def _readAudio(self, audio):
@@ -481,13 +470,28 @@ class FileScanner:
             audio.samplerate * self.args.secondsOverlap
         )
         blocks = []
-        for x in range(0, audio.numSamples, samplesBetweenBlocks):
+        offset = 0
+        while True:
             self._waitForPendingBlocks()
-            b = audio.read(x, samplesPerBlock)
-            if len(b) < 1:
-                break
-            blocks.append(self._enqueueBlock(audio.samplerate, x, b))
-        self.pendingFiles.append((audio, blocks))
+            buf = audio.read(offset, samplesPerBlock)
+            if len(buf) > 0:
+                blocks.append(self._enqueueBlock(audio.samplerate, offset, buf))
+            if len(buf) != samplesPerBlock:
+                # Found the actual end of file; trust this instead of the
+                # header duration, which is often approximate.
+                self.pendingFiles.append(
+                    (
+                        dict(
+                            path=audio.path,
+                            samplerate=audio.samplerate,
+                            channels=audio.channels,
+                            duration=(offset + len(buf)) / audio.samplerate,
+                        ),
+                        blocks,
+                    )
+                )
+                return
+            offset += samplesBetweenBlocks
 
 
 class FileListing:
