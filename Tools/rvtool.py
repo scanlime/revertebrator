@@ -827,22 +827,24 @@ class FilePacker:
 
 class JsonExport:
     def arguments(parser):
+        default_output = "-"
         Database.queryArguments(parser)
         parser.add_argument(
             "-o",
             metavar="DEST",
             dest="output",
-            help=f"write output to a file [stdout]",
+            default=default_output,
+            help=f"write output to a file [{default_output}]",
         )
         parser.set_defaults(factory=JsonExport)
 
     def __init__(self, args):
         self.db = Database(args)
         self.args = args
-        if args.output:
-            self.output = open(args.output, "x")
-        else:
+        if args.output == "-":
             self.output = sys.stdout
+        else:
+            self.output = open(args.output, "x")
 
     def run(self):
         for info in self.db.iterFiles(self.args):
@@ -873,14 +875,19 @@ class JsonImport:
 
     def run(self):
         for input in self.args.inputs:
-            with open(input) as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        info = json.loads(line)
-                        if self.args.replace:
-                            self.db.forgetPaths([info["path"]])
-                        self.db.storeFile(info)
+            if input == "-":
+                self._importFile(sys.stdin)
+            else:
+                self._importFile(open(input))
+
+    def _importFile(self, f):
+        for line in f:
+            line = line.strip()
+            if line:
+                info = json.loads(line)
+                if self.args.replace:
+                    self.db.forgetPaths([info["path"]])
+                self.db.storeFile(info)
 
 
 def main():
