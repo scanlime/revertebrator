@@ -777,6 +777,14 @@ class FilePacker:
     def run(self):
         self._buildCombinedIndex()
         self._buildCompactIndex()
+        try:
+            self._writeArchiveFile()
+            tqdm.tqdm.write(f"Completed {self.filename}")
+        except Exception as e:
+            os.unlink(self.filename)
+            raise e
+
+    def _writeArchiveFile(self):
         with zipfile.ZipFile(self.filename, "x", zipfile.ZIP_STORED) as z:
             with tempfile.TemporaryFile(dir=os.path.dirname(self.filename)) as tmp:
                 with soundfile.SoundFile(
@@ -821,8 +829,6 @@ class FilePacker:
                                 break
                             f.write(block)
                             progress.update(len(block))
-
-        tqdm.tqdm.write(f"Completed {self.filename}")
 
 
 class JsonExport:
