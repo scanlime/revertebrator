@@ -774,6 +774,31 @@ class FilePacker:
             },
         )
 
+    def _collectSources(self):
+        assert len(self.cgx) == len(self.cii)
+        grains = []
+        sources = []
+        fileIdToSourceId = {}
+        for grainId, (gx, fileId) in enumerate(zip(self.cgx, self.cii)):
+            if fileId not in fileIdToSourceId:
+                fileInfo = self.files[fileId]
+                fileIdToSourceId[fileId] = len(sources)
+                sources.append(
+                    {
+                        "path": fileInfo["path"],
+                        "samplerate": fileInfo["samplerate"],
+                        "duration": fileInfo["duration"],
+                        "channels": fileInfo["channels"],
+                        "grains": [],
+                    }
+                )
+            sourceId = fileIdToSourceId[fileId]
+            samplerate = sources[sourceId]["samplerate"]
+            sources[sourceId]["grains"].append(grainId)
+            grainTimestamp = gx / samplerate
+            grains.append([int(sourceId), grainTimestamp])
+        return {"sources": sources, "grains": grains}
+
     def run(self):
         self._buildCombinedIndex()
         self._buildCompactIndex()
@@ -816,6 +841,12 @@ class FilePacker:
                 z.writestr(
                     zipfile.ZipInfo("samplerates.f32"),
                     sampleRates.astype("<f").tobytes(),
+                    zipfile.ZIP_DEFLATED,
+                    9,
+                )
+                z.writestr(
+                    zipfile.ZipInfo("sources.json"),
+                    json.dumps(self._collectSources()) + "\n",
                     zipfile.ZIP_DEFLATED,
                     9,
                 )
