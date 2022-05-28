@@ -132,6 +132,16 @@ private:
   int cleanupCounter{0};
 };
 
+class GrainSources {
+public:
+  void load(const juce::File &);
+  juce::String pathForGrainSource(unsigned);
+
+private:
+  std::mutex mutex;
+  juce::var data;
+};
+
 class GrainIndex : public juce::ReferenceCountedObject {
 public:
   using Ptr = juce::ReferenceCountedObjectPtr<GrainIndex>;
@@ -149,6 +159,7 @@ public:
   juce::Array<float> sampleRates;
   juce::Result status;
   GrainWaveformCache cache;
+  GrainSources sources;
 
   inline unsigned numBins() const { return binF0.size(); }
   inline unsigned numGrains() const { return grainX.size(); }

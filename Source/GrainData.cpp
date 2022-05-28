@@ -94,12 +94,14 @@ private:
                                  : newIndex->status.getErrorMessage();
     {
       std::lock_guard<std::mutex> guard(indexMutex);
-      std::swap(indexPtr, newIndex);
+      indexPtr = newIndex;
     }
     {
       juce::ScopedLock guard(valuesRecursiveMutex);
       statusValue.setValue(newStatus);
     }
+    // Asynchronously load the sources, after the index itself is active
+    newIndex->sources.load(srcToLoad);
     // Check again in case a change occurred while we were loading
     return JobStatus::jobNeedsRunningAgain;
   }
@@ -659,4 +661,33 @@ float GrainData::averageLoadQueueDepth() {
   } else {
     return totalDepth / totalThreads;
   }
+}
+
+void GrainSources::load(const juce::File &archiveFile) {
+  ZipReader64 zip(archiveFile);
+  if (zip.openedOk()) {
+    auto file = zip.open("sources.json");
+    if (file != nullptr) {
+      auto newData = juce::JSON::parse(*file);
+      std::lock_guard<std::mutex> guard(mutex);
+      data = std::move(newData);
+    }
+  }
+}
+
+juce::String GrainSources::pathForGrainSource(unsigned grain) {
+  std::lock_guard<std::mutex> guard(mutex);
+  auto grainTable = data.getProperty("grains", juce::var());
+  if (grainTable.size() > grain) {
+    auto grainInfo = grainTable[grain];
+    if (grainInfo.size() >= 1) {
+      int sourceId = grainInfo[0];
+      auto sourceTable = data.getProperty("sources", juce::var());
+      if (sourceTable.size() > sourceId) {
+        auto sourceInfo = sourceTable[sourceId];
+        return sourceInfo.getProperty("path", juce::var());
+      }
+    }
+  }
+  return "";
 }

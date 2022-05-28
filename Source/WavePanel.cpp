@@ -15,6 +15,7 @@ public:
 
   struct WaveInfo {
     GrainWaveform::Ptr wave;
+    GrainIndex::Ptr index;
     std::vector<WavePlayback> playing;
   };
 
@@ -27,12 +28,15 @@ public:
       widthInSamples = std::max(widthInSamples, minimum);
     }
 
-    void addPlayback(GrainWaveform &wave, const WavePlayback &playback) {
+    void addPlayback(GrainWaveform &wave, GrainIndex &index,
+                     const WavePlayback &playback) {
       auto &slot = waves[&wave];
       if (slot.wave == nullptr) {
         slot.wave = wave;
+        slot.index = index;
       }
       jassert(slot.wave.get() == &wave);
+      jassert(slot.index.get() == &index);
       slot.playing.push_back(playback);
     }
 
@@ -56,25 +60,8 @@ public:
     // Each sorted active grain gets a row in the backing image
     auto waves = collectWavesSortedByGrain();
     if (waves.size() > 0) {
-      int maxNumberOfCoverageMaps = height() / 2;
-      std::vector<CoverageMap> maps(
-          std::min<int>(waves.size(), maxNumberOfCoverageMaps));
-      for (int i = 0; i < waves.size(); i++) {
-        auto &map = maps[std::min<int>(maps.size() - 1,
-                                       i * maps.size() / waves.size())];
-        coverageForWavePlayback(*waves[i], map);
-      }
-      auto peakCoverage = 0.f;
-      for (const auto &map : maps) {
-        peakCoverage = std::max(peakCoverage, map.peakValue());
-      }
-      for (int i = 0; i < maps.size(); i++) {
-        static constexpr float peakContrast = 1.5f;
-        int top = i * height() / maps.size();
-        int bottom = (i + 1) * height() / maps.size();
-        drawCoverageMap(*image, maps[i], peakContrast / peakCoverage, top,
-                        bottom);
-      }
+      drawWaveCoverageMaps(waves, *image);
+      drawWaveSources(waves, *image);
     } else {
       juce::Graphics g(*image);
       g.setColour(params.background);
@@ -159,6 +146,47 @@ private:
     g.fillEllipse(x - thick, h - margin - thick * 2, thick * 2, thick * 2);
   }
 
+  void drawWaveCoverageMaps(const std::vector<const WaveInfo *> &waves,
+                            juce::Image &image) {
+    int maxNumberOfCoverageMaps = height() / 2;
+    std::vector<CoverageMap> maps(
+        std::min<int>(waves.size(), maxNumberOfCoverageMaps));
+    for (int i = 0; i < waves.size(); i++) {
+      auto &map =
+          maps[std::min<int>(maps.size() - 1, i * maps.size() / waves.size())];
+      coverageForWavePlayback(*waves[i], map);
+    }
+    auto peakCoverage = 0.f;
+    for (const auto &map : maps) {
+      peakCoverage = std::max(peakCoverage, map.peakValue());
+    }
+    for (int i = 0; i < maps.size(); i++) {
+      static constexpr float peakContrast = 1.5f;
+      int top = i * height() / maps.size();
+      int bottom = (i + 1) * height() / maps.size();
+      drawCoverageMap(image, maps[i], peakContrast / peakCoverage, top, bottom);
+    }
+  }
+
+  void drawWaveSources(const std::vector<const WaveInfo *> &waves,
+                       juce::Image &image) {
+    // The text fades out as it gets more crowded
+    float height = image.getHeight() / float(waves.size());
+    float opacity =
+        juce::jlimit(0.f, 0.5f, juce::jmap(height, 2.f, 20.f, 0.f, 0.5f));
+    if (opacity > 0.f) {
+      juce::Graphics g(image);
+      g.setColour(params.background.contrasting(1.f));
+      g.setOpacity(opacity);
+      for (int i = 0; i < waves.size(); i++) {
+        unsigned grain = waves[i]->wave->key.grain;
+        auto source = waves[i]->index->sources.pathForGrainSource(grain);
+        g.drawFittedText(source, 0, height * i, image.getWidth(), height,
+                         juce::Justification::left, 1);
+      }
+    }
+  }
+
   std::vector<GrainWaveform::Window> collectUniqueWaveformWindows() const {
     std::vector<GrainWaveform::Window> result;
     for (auto &item : state.waves) {
@@ -239,7 +267,7 @@ public:
       std::lock_guard<std::mutex> guard(collectorMutex);
       collector->ensureWidth(
           sound.params.common.maxGrainWidthSamples(*sound.index));
-      collector->addPlayback(wave, {seq, samples});
+      collector->addPlayback(wave, *sound.index, {seq, samples});
     }
   }
 
