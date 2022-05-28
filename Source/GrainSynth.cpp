@@ -318,6 +318,7 @@ void GrainVoice::renderNextBlock(juce::AudioBuffer<float> &outputBuffer,
   if (queue.empty()) {
     // No more work
     clearCurrentNote();
+    reservoir.clear();
   } else {
     renderFromQueue(*sound, outputBuffer, startSample, numSamples);
   }
