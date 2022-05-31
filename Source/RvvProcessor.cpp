@@ -55,6 +55,12 @@ RvvProcessor::RvvProcessor()
                 std::make_unique<juce::AudioParameterFloat>(
                     "gain_db_high", "Volume High",
                     juce::NormalisableRange<float>(-100.0f, 0.0f), -30.0f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "filter_highpass", "High Pass",
+                    juce::NormalisableRange<float>(0.01f, 20.f), 0.2f),
+                std::make_unique<juce::AudioParameterFloat>(
+                    "filter_lowpass", "Low Pass",
+                    juce::NormalisableRange<float>(0.01f, 20.0f), 20.0f),
             }),
       grainData(generalPurposeThreads), synth(grainData, 512) {
 
@@ -165,6 +171,9 @@ void RvvProcessor::updateSoundFromState() {
         .stereoCenter = state.getParameterAsValue("stereo_center").getValue(),
         .gainDbLow = state.getParameterAsValue("gain_db_low").getValue(),
         .gainDbHigh = state.getParameterAsValue("gain_db_high").getValue(),
+        .filterHighPass =
+            state.getParameterAsValue("filter_highpass").getValue(),
+        .filterLowPass = state.getParameterAsValue("filter_lowpass").getValue(),
     };
     auto midiParams = MidiGrainSequence::MidiParams{
         .common = commonParams,

@@ -6,6 +6,10 @@ class GrainWaveform : public juce::ReferenceCountedObject {
 public:
   using Ptr = juce::ReferenceCountedObjectPtr<GrainWaveform>;
 
+  // Chain of IIR filters to apply prior to windowing and gain normalization
+  using Filters = juce::Array<juce::IIRCoefficients>;
+
+  // Window function, scaled to a particular size in samples
   struct Window {
     float mix;
     int width0, width1, phase1;
@@ -65,10 +69,22 @@ public:
     unsigned grain;
     float speedRatio;
     Window window;
+    Filters filters;
 
     inline bool operator==(const Key &o) const noexcept {
-      return grain == o.grain && speedRatio == o.speedRatio &&
-             window == o.window;
+      if (!(grain == o.grain && speedRatio == o.speedRatio &&
+            window == o.window && filters.size() == o.filters.size())) {
+        return false;
+      }
+      for (int f = 0; f < filters.size(); f++) {
+        const auto &coeff = filters[f].coefficients;
+        for (int c = 0; c < juce::numElementsInArray(coeff); c++) {
+          if (coeff[c] != o.filters[f].coefficients[c]) {
+            return false;
+          }
+        }
+      }
+      return true;
     }
   };
 

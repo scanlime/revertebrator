@@ -17,17 +17,13 @@ GrainSequence::Params::window(const GrainIndex &index) const {
   return GrainWaveform::Window(maxGrainWidthSamples(index), windowParams);
 }
 
-unsigned GrainSequence::Params::grain(const GrainIndex &index, float pitch,
-                                      float sel) {
+unsigned GrainSequence::Params::grain(const GrainIndex &index, float &pitch,
+                                      float &sel) {
   auto bin = index.closestBinForPitch(pitch / speedWarp);
+  pitch = index.binF0[bin] * speedWarp;
   auto gr = index.grainsForBin(bin);
-  auto sel01 = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
-  return gr.clipValue(gr.getStart() + gr.getLength() * sel01);
-}
-
-unsigned GrainSequence::Params::grain(const GrainIndex &index, Rng &rng,
-                                      float pitch, float sel) {
-  return grain(index, pitchNoise(rng, pitch), selNoise(rng, sel));
+  sel = juce::jlimit<float>(0.f, 1.f, std::fmod(sel + 2., 1.));
+  return gr.clipValue(gr.getStart() + gr.getLength() * sel);
 }
 
 GrainSequence::Gains
@@ -64,6 +60,13 @@ float GrainSequence::Params::pitchNoise(Rng &rng, float input) const {
   return input * pitchRatio;
 }
 
+GrainWaveform::Filters GrainSequence::Params::filters(float pitch) {
+  return {
+      juce::IIRCoefficients::makeHighPass(sampleRate, pitch * filterHighPass),
+      juce::IIRCoefficients::makeLowPass(sampleRate, pitch * filterLowPass),
+  };
+}
+
 TouchGrainSequence::TouchGrainSequence(GrainIndex &index, const Params &params,
                                        const TouchEvent &event)
     : index(index), params(params), event(event) {}
@@ -71,13 +74,16 @@ TouchGrainSequence::TouchGrainSequence(GrainIndex &index, const Params &params,
 TouchGrainSequence::~TouchGrainSequence() {}
 
 GrainSequence::Point TouchGrainSequence::generate(Rng &rng) {
-  auto grain = params.grain(index, rng, event.pitch, event.sel);
+  auto pitch = params.pitchNoise(rng, event.pitch);
+  auto sel = params.selNoise(rng, event.sel);
+  auto grain = params.grain(index, pitch, sel);
   return Point{
       .waveKey =
           {
               .grain = grain,
               .speedRatio = params.speedRatio(index, grain),
               .window = params.window(index),
+              .filters = params.filters(pitch),
           },
       .samplesUntilNextPoint = params.samplesUntilNextPoint(rng),
       .gains = params.velocityToGains(rng, event.velocity),
@@ -93,16 +99,18 @@ MidiGrainSequence::~MidiGrainSequence() {}
 
 GrainSequence::Point MidiGrainSequence::generate(Rng &rng) {
   auto bend = params.pitchBendRange * (event.pitchWheel / 8192.0f - 1.0f);
-  auto pitch = 440.0f * std::pow(2.0f, (event.note + bend - 69.0f) / 12.0f);
-  auto sel =
-      params.selCenter + params.selMod * (event.modWheel / 128.0f - 0.5f);
-  auto grain = params.common.grain(index, rng, pitch, sel);
+  auto pitch = params.common.pitchNoise(
+      rng, 440.0f * std::pow(2.0f, (event.note + bend - 69.0f) / 12.0f));
+  auto sel = params.common.selNoise(
+      rng, params.selCenter + params.selMod * (event.modWheel / 128.0f - 0.5f));
+  auto grain = params.common.grain(index, pitch, sel);
   return Point{
       .waveKey =
           {
               .grain = grain,
               .speedRatio = params.common.speedRatio(index, grain),
               .window = params.common.window(index),
+              .filters = params.common.filters(pitch),
           },
       .samplesUntilNextPoint = params.common.samplesUntilNextPoint(rng),
       .gains = params.common.velocityToGains(rng, event.velocity),

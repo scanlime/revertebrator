@@ -22,16 +22,17 @@ public:
     float sampleRate, grainRate, grainRateSpread;
     float selSpread, pitchSpread, stereoSpread;
     float speedWarp, stereoCenter, gainDbLow, gainDbHigh;
+    float filterHighPass, filterLowPass;
 
     float speedRatio(const GrainIndex &, unsigned grain) const;
     float maxGrainWidthSamples(const GrainIndex &) const;
     GrainWaveform::Window window(const GrainIndex &) const;
-    unsigned grain(const GrainIndex &, float pitch, float sel);
-    unsigned grain(const GrainIndex &, Rng &, float pitch, float sel);
+    unsigned grain(const GrainIndex &, float &pitch, float &sel);
     Gains velocityToGains(Rng &, float) const;
     int samplesUntilNextPoint(Rng &) const;
     float selNoise(Rng &, float) const;
     float pitchNoise(Rng &, float) const;
+    GrainWaveform::Filters filters(float pitch);
   };
 
   virtual ~GrainSequence();

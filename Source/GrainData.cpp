@@ -279,6 +279,16 @@ private:
                            range.getLength());
     }
 
+    // Apply each of the pre-normalization IIR filter stages on each channel
+    juce::SingleThreadedIIRFilter iir;
+    for (const auto &stage : job.key.filters) {
+      iir.setCoefficients(stage);
+      for (int ch = 0; ch < numChannels; ch++) {
+        iir.reset();
+        iir.processSamples(writePtrs[ch], range.getLength());
+      }
+    }
+
     // Apply windowing and RMS normalization in-place in GrainWaveform buffer
     double accum = 0.;
     for (int i = 0; i < range.getLength(); i++) {
