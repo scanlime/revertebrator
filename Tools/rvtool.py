@@ -924,7 +924,9 @@ class JsonImport:
                 info = json.loads(line)
                 if self.args.replace:
                     self.db.forgetPaths([info["path"]])
-                self.db.storeFile(info)
+                    self.db.storeFile(info)
+                elif not self.db.hasFile(info["path"]):
+                    self.db.storeFile(info)
 
 
 def main():
