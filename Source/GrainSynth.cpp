@@ -61,10 +61,16 @@ float GrainSequence::Params::pitchNoise(Rng &rng, float input) const {
 }
 
 GrainWaveform::Filters GrainSequence::Params::filters(float pitch) {
-  return {
-      juce::IIRCoefficients::makeHighPass(sampleRate, pitch * filterHighPass),
-      juce::IIRCoefficients::makeLowPass(sampleRate, pitch * filterLowPass),
-  };
+  juce::Array<juce::IIRCoefficients> results;
+  auto highPassFreq = pitch * filterHighPass;
+  auto lowPassFreq = pitch * filterLowPass;
+  if (highPassFreq > 0.f && highPassFreq < sampleRate / 2) {
+    results.add(juce::IIRCoefficients::makeHighPass(sampleRate, highPassFreq));
+  }
+  if (lowPassFreq > 0.f && lowPassFreq < sampleRate / 2) {
+    results.add(juce::IIRCoefficients::makeLowPass(sampleRate, lowPassFreq));
+  }
+  return results;
 }
 
 TouchGrainSequence::TouchGrainSequence(GrainIndex &index, const Params &params,

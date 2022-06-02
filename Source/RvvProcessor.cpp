@@ -57,10 +57,10 @@ RvvProcessor::RvvProcessor()
                     juce::NormalisableRange<float>(-100.0f, 0.0f), -30.0f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "filter_highpass", "High Pass",
-                    juce::NormalisableRange<float>(0.01f, 20.f), 0.2f),
+                    juce::NormalisableRange<float>(0.0f, 20.f), 0.f),
                 std::make_unique<juce::AudioParameterFloat>(
                     "filter_lowpass", "Low Pass",
-                    juce::NormalisableRange<float>(0.01f, 20.0f), 20.0f),
+                    juce::NormalisableRange<float>(0.0f, 20.0f), 20.f),
             }),
       grainData(generalPurposeThreads), synth(grainData, 512) {
 
