@@ -11,8 +11,8 @@ public:
   void paint(juce::Graphics &) override;
   void resized() override;
 
-  static constexpr int defaultWidth = 600;
-  static constexpr int defaultHeight = 500;
+  static constexpr int defaultWidth = 800;
+  static constexpr int defaultHeight = 700;
 
 private:
   struct Parts;
