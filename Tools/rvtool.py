@@ -339,6 +339,12 @@ class FileScanner:
             help=f"pitch detection resolution in semitones [{resolution}]",
         )
         parser.add_argument(
+            "-n",
+            dest="listOnly",
+            action="store_true",
+            help="no scan, only list the files we would scan",
+        )
+        parser.add_argument(
             "inputs",
             metavar="SRC",
             nargs="+",
@@ -371,7 +377,7 @@ class FileScanner:
 
     def _visitInputs(self):
         files = set()
-        for input in tqdm.tqdm(self.args.inputs, unit="input"):
+        for input in self.args.inputs:
             if os.path.isfile(input):
                 files.add(os.path.realpath(input))
             else:
@@ -384,10 +390,15 @@ class FileScanner:
                         ):
                             files.add(os.path.realpath(os.path.join(dirpath, filename)))
         files = list(files)
-        random.shuffle(files)
-        for path in tqdm.tqdm(files, unit="file"):
-            self._visitFile(path)
-            self._storeCompletedFiles()
+        if self.args.listOnly:
+            for f in files:
+                if not self.db.hasFile(f):
+                    print(f)
+        else:
+            random.shuffle(files)
+            for path in tqdm.tqdm(files, unit="file"):
+                self._visitFile(path)
+                self._storeCompletedFiles()
 
     def _visitFile(self, path):
         if not self.db.hasFile(path):
